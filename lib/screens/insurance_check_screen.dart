@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 class EligibilityScreen extends StatefulWidget {
@@ -79,9 +80,7 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
         "coverageSummary": {
           "summary": "Member has active benefits under CHOICE plan.",
         },
-        "miscInfo": {
-          "message": "Eligibility verified successfully.",
-        },
+        "miscInfo": {"message": "Eligibility verified successfully."},
         "benefitSummary": {
           "inNetwork": {
             "service": "Specialist Office",
@@ -97,14 +96,18 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
             "coIns": "40%",
             "authRequired": "Likely",
           },
-          "planDeductibleOOP": {
-            "deductible": "\$1,500",
-            "oopMax": "\$5,000",
-          },
-          "roleNotes": {
-            "providerRole": "PROVIDER ROLE OTHER",
-          },
+          "planDeductibleOOP": {"deductible": "\$1,500", "oopMax": "\$5,000"},
+          "roleNotes": {"providerRole": "PROVIDER ROLE OTHER"},
+          
         },
+        "financials": {
+            "deductibleTotal": 2500.00,
+            "deductibleMet": 555.00, // example
+            "oopMaxTotal": 5500.00,
+            "oopMet": 820.00, // example
+            "coinsurancePercent": 20, // 20% after deductible
+            "specialistCopay": 75.00, // $75 per visit
+          },
       };
 
       setState(() {
@@ -119,11 +122,32 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
     }
   }
 
-  String? _required(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
+  String? _required(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'Required' : null;
+
+  String _fmtCurrency(num? v) => v == null ? '—' : '\$${v.toStringAsFixed(0)}';
+double _safeDiv(num a, num b) => (b == 0) ? 0.0 : (a / b);
+
+String _buildFinancialNarrative(Map<String, dynamic> f) {
+  final dedTotal = (f['deductibleTotal'] ?? 0).toDouble();
+  final dedMet   = (f['deductibleMet'] ?? 0).toDouble();
+  final dedLeft  = (dedTotal - dedMet).clamp(0, dedTotal);
+  final coins    = (f['coinsurancePercent'] ?? 0).toInt();
+  final oopMax   = (f['oopMaxTotal'] ?? 0).toDouble();
+
+  return 'Your annual deductible is ${_fmtCurrency(dedTotal)}, and you have '
+         '${_fmtCurrency(dedLeft)} left to meet it. Until you meet that amount, '
+         'you’ll pay the full allowed cost for immunotherapy visits. Once your '
+         'deductible is met, you’ll pay $coins% of the allowed cost for these services '
+         'until your total out-of-pocket spending reaches ${_fmtCurrency(oopMax)}, '
+         'at which point insurance will pay 100% for the rest of the year.';
+}
+    
 
   @override
   Widget build(BuildContext context) {
-    const scaffoldBg = Colors.white;// Color(0xFFF4F8FF); // bright, soft background
+    const scaffoldBg =
+        Colors.white; // Color(0xFFF4F8FF); // bright, soft background
     return Scaffold(
       backgroundColor: scaffoldBg,
       appBar: AppBar(
@@ -143,8 +167,7 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
                 children: [
                   _buildInputCard(),
                   const SizedBox(height: 16),
-                  if (_isLoading)
-                    const _LoadingCard(),
+                  if (_isLoading) const _LoadingCard(),
                   if (_error != null && !_isLoading)
                     _MessageCard(
                       color: Colors.amber[50]!,
@@ -179,6 +202,17 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
 
                     _SectionHeader(title: 'Plan Benefit & Service Summary'),
                     _BenefitSummaryCard(data: _data!["benefitSummary"] ?? {}),
+                    const SizedBox(height: 16),
+                    _SectionHeader(title: 'Costs at a Glance'),
+                    FinancialOverviewCard(data: _data!['financials'] ?? {}),
+                    const SizedBox(height: 16),
+                    _SimpleNoteCard(
+                      title: 'What this means',
+                      text: _buildFinancialNarrative(
+                        _data!['financials'] ?? {},
+                      ),
+                      icon: Icons.insights,
+                    ),
                   ],
                 ],
               ),
@@ -190,109 +224,111 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
   }
 
   Widget _buildInputCard() {
-  return Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.06),
-          blurRadius: 14,
-          offset: const Offset(0, 8),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 🔵 Colored header
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0d6efd), // bright blue accent
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
           ),
-          child: Row(
-            children: const [
-              Icon(Icons.person_search, color: Colors.white),
-              SizedBox(width: 8),
-              Text(
-                'Member Details',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // 📝 Form content
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextFormField(
-                  controller: _payerController,
-                  decoration: const InputDecoration(
-                    labelText: 'Payer Name',
-                    hintText: 'e.g., UnitedHealthcare',
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.account_balance),
-                  ),
-                  validator: _required,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _memberIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Member ID',
-                    hintText: 'e.g., 123456789',
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.badge_outlined),
-                  ),
-                  validator: _required,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _dobController,
-                  readOnly: true,
-                  onTap: _pickDob,
-                  decoration: const InputDecoration(
-                    labelText: 'Date of Birth',
-                    hintText: 'MM/DD/YYYY',
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.calendar_today),
-                  ),
-                  validator: _required,
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Fetch Eligibility', style: TextStyle(color: Colors.white),),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0d6efd),
-                    ),
-                    onPressed: _isLoading ? null : _fetchEligibility,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 🔵 Colored header
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0d6efd), // bright blue accent
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.person_search, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'Member Details',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
               ],
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
 
+          // 📝 Form content
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: _payerController,
+                    decoration: const InputDecoration(
+                      labelText: 'Payer Name',
+                      hintText: 'e.g., UnitedHealthcare',
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.account_balance),
+                    ),
+                    validator: _required,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _memberIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Member ID',
+                      hintText: 'e.g., 123456789',
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.badge_outlined),
+                    ),
+                    validator: _required,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _dobController,
+                    readOnly: true,
+                    onTap: _pickDob,
+                    decoration: const InputDecoration(
+                      labelText: 'Date of Birth',
+                      hintText: 'MM/DD/YYYY',
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.calendar_today),
+                    ),
+                    validator: _required,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: const Text(
+                        'Fetch Eligibility',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0d6efd),
+                      ),
+                      onPressed: _isLoading ? null : _fetchEligibility,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// ---------- Reusable UI pieces ----------
@@ -362,16 +398,17 @@ class _TitleRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700)),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               if (subtitle != null)
                 Text(
                   subtitle!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[700],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                 ),
             ],
           ),
@@ -458,18 +495,41 @@ class _PlanCoverageCard extends StatelessWidget {
     return _CardContainer(
       child: Column(
         children: [
-          _row('Status', status,
-              valueStyle: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: _statusColor(status),
-              ),
-              icon: Icons.verified_user),
-          _row('Effective Date', data["effectiveDate"] ?? '—', icon: Icons.event),
-          _row('Plan Name', data["planName"] ?? '—', icon: Icons.medical_services),
-          _row('Self Funded Plan', data["selfFundedPlan"] ?? '—', icon: Icons.account_balance),
-          _row('Policy Type', data["policyType"] ?? '—', icon: Icons.description),
+          _row(
+            'Status',
+            status,
+            valueStyle: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: _statusColor(status),
+            ),
+            icon: Icons.verified_user,
+          ),
+          _row(
+            'Effective Date',
+            data["effectiveDate"] ?? '—',
+            icon: Icons.event,
+          ),
+          _row(
+            'Plan Name',
+            data["planName"] ?? '—',
+            icon: Icons.medical_services,
+          ),
+          _row(
+            'Self Funded Plan',
+            data["selfFundedPlan"] ?? '—',
+            icon: Icons.account_balance,
+          ),
+          _row(
+            'Policy Type',
+            data["policyType"] ?? '—',
+            icon: Icons.description,
+          ),
           _row('Group Number', data["groupNumber"] ?? '—', icon: Icons.tag),
-          _row('Patient Gender', data["patientGender"] ?? '—', icon: Icons.person),
+          _row(
+            'Patient Gender',
+            data["patientGender"] ?? '—',
+            icon: Icons.person,
+          ),
         ],
       ),
     );
@@ -518,7 +578,9 @@ class _OtherPayerCard extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: Colors.grey[700]),
           const SizedBox(width: 8),
-          Expanded(child: Text(k, style: const TextStyle(fontWeight: FontWeight.w600))),
+          Expanded(
+            child: Text(k, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
           Text(v),
         ],
       ),
@@ -531,7 +593,11 @@ class _SimpleNoteCard extends StatelessWidget {
   final String text;
   final IconData icon;
 
-  const _SimpleNoteCard({required this.title, required this.text, required this.icon});
+  const _SimpleNoteCard({
+    required this.title,
+    required this.text,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -545,8 +611,10 @@ class _SimpleNoteCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 6),
                 Text(text),
               ],
@@ -569,7 +637,13 @@ class _BenefitSummaryCard extends StatelessWidget {
         color: (color ?? Colors.blue).withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(label, style: TextStyle(color: color ?? Colors.blue, fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color ?? Colors.blue,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 
@@ -595,17 +669,30 @@ class _BenefitSummaryCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _chip('Deductible: ${dedOop["deductible"] ?? "—"}', color: Colors.deepPurple),
-              _chip('OOP Max: ${dedOop["oopMax"] ?? "—"}', color: Colors.deepPurple),
+              _chip(
+                'Deductible: ${dedOop["deductible"] ?? "—"}',
+                color: Colors.deepPurple,
+              ),
+              _chip(
+                'OOP Max: ${dedOop["oopMax"] ?? "—"}',
+                color: Colors.deepPurple,
+              ),
             ],
           ),
           const SizedBox(height: 12),
           if ((role["providerRole"] ?? '') != '')
             Row(
               children: [
-                const Icon(Icons.person_pin_circle, size: 18, color: Colors.grey),
+                const Icon(
+                  Icons.person_pin_circle,
+                  size: 18,
+                  color: Colors.grey,
+                ),
                 const SizedBox(width: 6),
-                Text(role["providerRole"], style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  role["providerRole"],
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ],
             ),
         ],
@@ -624,7 +711,10 @@ class _BenefitSummaryCard extends StatelessWidget {
           runSpacing: 8,
           children: [
             _chip(m["service"] ?? 'Service', color: Colors.indigo),
-            _chip('Covered: ${m["serviceCovered"] ?? "—"}', color: coveredColor),
+            _chip(
+              'Covered: ${m["serviceCovered"] ?? "—"}',
+              color: coveredColor,
+            ),
             _chip('CoPay: ${m["coPay"] ?? "—"}', color: Colors.orange),
             _chip('CoIns: ${m["coIns"] ?? "—"}', color: Colors.teal),
           ],
@@ -634,15 +724,196 @@ class _BenefitSummaryCard extends StatelessWidget {
           children: [
             const Icon(Icons.verified_user, size: 18, color: Colors.grey),
             const SizedBox(width: 6),
-            Expanded(
-              child: Text('Auth: ${m["authRequired"] ?? "—"}'),
-            ),
+            Expanded(child: Text('Auth: ${m["authRequired"] ?? "—"}')),
           ],
         ),
       ],
     );
   }
 }
+
+class FinancialOverviewCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const FinancialOverviewCard({required this.data});
+
+  double _safeDiv(num a, num b) => (b == 0) ? 0.0 : (a / b);
+  String _fmtCurrency(num? v) => v == null ? '—' : '\$${v.toStringAsFixed(0)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final deductibleTotal = (data['deductibleTotal'] ?? 0).toDouble();
+    final deductibleMet   = (data['deductibleMet'] ?? 0).toDouble();
+    final deductibleLeft  = (deductibleTotal - deductibleMet).clamp(0, deductibleTotal);
+    final deductiblePct   = _safeDiv(deductibleMet, deductibleTotal).clamp(0.0, 1.0);
+
+    final oopMaxTotal = (data['oopMaxTotal'] ?? 0).toDouble();
+    final oopMet      = (data['oopMet'] ?? 0).toDouble();
+    final oopPct      = _safeDiv(oopMet, oopMaxTotal).clamp(0.0, 1.0);
+
+    final copay       = (data['specialistCopay'] ?? 0).toDouble();
+    final coins       = (data['coinsurancePercent'] ?? 0).toInt();
+
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title row
+          Row(
+            children: const [
+              _IconDot(icon: Icons.payments_outlined),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text('Financial Summary',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Deductible donut + Quick facts responsive layout
+          LayoutBuilder(
+            builder: (context, c) {
+              final narrow = c.maxWidth < 520;
+              final donut = _deductibleDonut(deductiblePct, deductibleMet, deductibleLeft, deductibleTotal);
+              final facts = _quickFacts(copay, coins);
+              return narrow
+                  ? Column(children: [donut, const SizedBox(height: 16), facts])
+                  : Row(children: [
+                      Expanded(flex: 2, child: donut),
+                      const SizedBox(width: 16),
+                      Expanded(flex: 3, child: facts),
+                    ]);
+            },
+          ),
+
+          const SizedBox(height: 20),
+          const Divider(),
+
+          // OOP progress bar
+          const SizedBox(height: 8),
+          const Text('Out-of-Pocket Progress', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: oopPct,
+              minHeight: 14,
+              backgroundColor: Colors.grey[200],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Met: ${_fmtCurrency(oopMet)}'),
+              Text('Max: ${_fmtCurrency(oopMaxTotal)}'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Pieces ---
+
+  Widget _deductibleDonut(double pct, double met, double left, double total) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 88,
+            height: 88,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 88,
+                  height: 88,
+                  child: CircularProgressIndicator(
+                    value: pct,
+                    strokeWidth: 10,
+                    backgroundColor: Colors.grey[200],
+                  ),
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('${(pct * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    const Text('Met', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                )
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Deductible', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: [
+                    _pill('Total: ${_fmtCurrency(total)}', Colors.indigo),
+                    _pill('Met: ${_fmtCurrency(met)}', Colors.green),
+                    _pill('Left: ${_fmtCurrency(left)}', Colors.orange),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quickFacts(double copay, int coins) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Quick Facts', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8, runSpacing: 8,
+          children: [
+            _pill('Specialist Copay: ${_fmtCurrency(copay)}', Colors.deepPurple),
+            _pill('Coinsurance: $coins%', Colors.teal),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _pill(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+// Small round icon used in card headers
+class _IconDot extends StatelessWidget {
+  final IconData icon;
+  const _IconDot({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(color: Color(0xFFE8F0FE), shape: BoxShape.circle),
+      padding: const EdgeInsets.all(10),
+      child: Icon(icon, color: const Color(0xFF0d6efd)),
+    );
+  }
+}
+
 
 class _SubHeader extends StatelessWidget {
   final String text;
@@ -652,8 +923,11 @@ class _SubHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style:
-          const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.black87),
+      style: const TextStyle(
+        fontWeight: FontWeight.w800,
+        fontSize: 14,
+        color: Colors.black87,
+      ),
     );
   }
 }
