@@ -17,11 +17,13 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
 
   // Replace with your actual Google Pollen API key
   static const String _apiKey = 'AIzaSyD1IWIMTxQDLW-XIrOAfTidlo4iEezZb3Q';
-  static const String _apiKey2 = 'AIzaSyD1IWIMTxQDLW-XIrOAfTidlo4iEezZb3Q';
 
   // Default location (San Francisco) - you can make this dynamic later
   final double _lat = 37.7749;
   final double _lng = -122.4194;
+
+  // final double _lat = 35.4676;
+  // final double _lng = -97.5164;
 
   @override
   void initState() {
@@ -31,70 +33,69 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
   }
 
   Future<void> _fetchPollenData() async {
-  setState(() {
-    _isLoading = true;
-    _error = '';
-  });
-
-  try {
-    // Build the URL in a way that preserves the colon in forecast:lookup
-    final base = Uri.parse('https://pollen.googleapis.com/v1/forecast:lookup');
-    final uri = base.replace(queryParameters: {
-      'key': _apiKey,
-      'location.latitude': _lat.toString(),
-      'location.longitude': _lng.toString(),
-      'days': '1',
-      // 'languageCode': 'en',
-      // 'plantsDescription': 'false',
+    setState(() {
+      _isLoading = true;
+      _error = '';
     });
 
-    debugPrint('🌐 Requesting: $uri');
+    try {
+      // Build the URL in a way that preserves the colon in forecast:lookup
+      final base = Uri.parse(
+        'https://pollen.googleapis.com/v1/forecast:lookup',
+      );
+      final uri = base.replace(
+        queryParameters: {
+          'key': _apiKey,
+          'location.latitude': _lat.toString(),
+          'location.longitude': _lng.toString(),
+          'days': '1',
+          // 'languageCode': 'en',
+          // 'plantsDescription': 'false',
+        },
+      );
 
-    final res = await http.get(uri);
-    debugPrint('📡 Status: ${res.statusCode}');
-    debugPrint('🔎 Final URL (after redirects): ${res.request?.url}');
-    debugPrint('📄 Body: ${res.body}');
+      debugPrint('🌐 Requesting: $uri');
 
-    if (res.statusCode == 200) {
-      final data = json.decode(res.body) as Map<String, dynamic>;
+      final res = await http.get(uri);
+      debugPrint('📡 Status: ${res.statusCode}');
+      debugPrint('🔎 Final URL (after redirects): ${res.request?.url}');
+      debugPrint('📄 Body: ${res.body}');
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body) as Map<String, dynamic>;
+        setState(() {
+          _pollenData = data;
+          _lastUpdated = DateTime.now();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+          _error = 'API ${res.statusCode}: ${res.body}';
+        });
+      }
+    } catch (e) {
       setState(() {
-        _pollenData = data;
-        _lastUpdated = DateTime.now();
         _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _isLoading = false;
-        _error = 'API ${res.statusCode}: ${res.body}';
+        _error = 'Error: $e';
       });
     }
-  } catch (e) {
-    setState(() {
-      _isLoading = false;
-      _error = 'Error: $e';
-    });
   }
-}
-
 
   Future<void> _tryQueryParamApiKey() async {
     try {
-      final url = 'https://pollen.googleapis.com/v1/forecast:lookup?key=$_apiKey';
+      final url =
+          'https://pollen.googleapis.com/v1/forecast:lookup?key=$_apiKey';
       print('🔄 Retrying with query param: $url');
-      
+
       final requestBody = {
-        'location': {
-          'longitude': _lng,
-          'latitude': _lat,
-        },
+        'location': {'longitude': _lng, 'latitude': _lat},
         'days': 1,
       };
 
       final response = await http.post(
         Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: json.encode(requestBody),
       );
 
@@ -114,7 +115,8 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
           _pollenData = _getMockData();
           _lastUpdated = DateTime.now();
           _isLoading = false;
-          _error = 'API Error (${response.statusCode}): Please check if Pollen API is enabled in Google Cloud Console. Using demo data.';
+          _error =
+              'API Error (${response.statusCode}): Please check if Pollen API is enabled in Google Cloud Console. Using demo data.';
         });
       }
     } catch (e) {
@@ -141,8 +143,8 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
                 'displayName': 'Universal Pollen Index',
                 'value': 3,
                 'category': 'MODERATE',
-                'indexDescription': 'Moderate pollen levels'
-              }
+                'indexDescription': 'Moderate pollen levels',
+              },
             },
             {
               'code': 'TREE',
@@ -152,8 +154,8 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
                 'displayName': 'Universal Pollen Index',
                 'value': 4,
                 'category': 'HIGH',
-                'indexDescription': 'High pollen levels'
-              }
+                'indexDescription': 'High pollen levels',
+              },
             },
             {
               'code': 'WEED',
@@ -163,21 +165,21 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
                 'displayName': 'Universal Pollen Index',
                 'value': 2,
                 'category': 'LOW',
-                'indexDescription': 'Low pollen levels'
-              }
-            }
-          ]
-        }
-      ]
+                'indexDescription': 'Low pollen levels',
+              },
+            },
+          ],
+        },
+      ],
     };
   }
 
   String _formatLastUpdated() {
     if (_lastUpdated == null) return 'Never';
-    
+
     final now = DateTime.now();
     final difference = now.difference(_lastUpdated!);
-    
+
     if (difference.inMinutes < 1) {
       return 'Just now';
     } else if (difference.inMinutes < 60) {
@@ -192,15 +194,17 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
   Color _getColorForCategory(String category) {
     switch (category.toUpperCase()) {
       case 'LOW':
-        return Colors.green;
+      case 'VERY_LOW':
+      case 'NONE':
+        return Colors.lightGreen; // instead of grey
       case 'MODERATE':
         return Colors.orange;
       case 'HIGH':
-        return Colors.red;
+        return Colors.redAccent;
       case 'VERY_HIGH':
         return Colors.purple;
       default:
-        return Colors.grey;
+        return Colors.blueGrey; // fallback still has a tint
     }
   }
 
@@ -232,17 +236,17 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white, // changed from color.withOpacity(0.08) to white
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
             offset: const Offset(0, 4),
           ),
         ],
       ),
+
       child: Row(
         children: [
           Container(
@@ -251,11 +255,7 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
               color: color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              size: 32,
-              color: color,
-            ),
+            child: Icon(icon, size: 32, color: color),
           ),
           const SizedBox(width: 20),
           Expanded(
@@ -273,10 +273,7 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -357,10 +354,7 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF4FC3F7),
-            Color(0xFF29B6F6),
-          ],
+          colors: [Color(0xFF4FC3F7), Color(0xFF29B6F6)],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -380,45 +374,28 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
               ),
               IconButton(
                 onPressed: _fetchPollenData,
-                icon: const Icon(
-                  Icons.refresh,
-                  color: Colors.white,
-                  size: 28,
-                ),
+                icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
               ),
             ],
           ),
           const SizedBox(height: 8),
           const Text(
             'San Francisco, CA',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white70,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.white70),
           ),
           const SizedBox(height: 4),
           Text(
             'Today, ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white60,
-            ),
+            style: const TextStyle(fontSize: 14, color: Colors.white60),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(
-                Icons.access_time,
-                size: 14,
-                color: Colors.white60,
-              ),
+              Icon(Icons.access_time, size: 14, color: Colors.white60),
               const SizedBox(width: 4),
               Text(
                 'Last updated: ${_formatLastUpdated()}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white60,
-                ),
+                style: const TextStyle(fontSize: 12, color: Colors.white60),
               ),
             ],
           ),
@@ -491,7 +468,9 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
                   const SizedBox(height: 16),
                   if (_pollenData['dailyInfo'] != null)
                     ...(_pollenData['dailyInfo'][0]['pollenTypeInfo'] as List)
-                        .map<Widget>((pollenInfo) => _buildPollenCard(pollenInfo))
+                        .map<Widget>(
+                          (pollenInfo) => _buildPollenCard(pollenInfo),
+                        )
                         .toList()
                   else
                     const Center(
@@ -535,10 +514,22 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildLegendItem('Low (1-2)', Colors.green, 'Minimal symptoms for most people'),
-          _buildLegendItem('Moderate (3)', Colors.orange, 'Some symptoms for sensitive people'),
+          _buildLegendItem(
+            'Low (1-2)',
+            Colors.green,
+            'Minimal symptoms for most people',
+          ),
+          _buildLegendItem(
+            'Moderate (3)',
+            Colors.orange,
+            'Some symptoms for sensitive people',
+          ),
           _buildLegendItem('High (4)', Colors.red, 'Symptoms for most people'),
-          _buildLegendItem('Very High (5)', Colors.purple, 'Severe symptoms for most people'),
+          _buildLegendItem(
+            'Very High (5)',
+            Colors.purple,
+            'Severe symptoms for most people',
+          ),
         ],
       ),
     );
@@ -552,10 +543,7 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
           Container(
             width: 16,
             height: 16,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -572,10 +560,7 @@ class _PollenAlertPageState extends State<PollenAlertPage> {
                 ),
                 Text(
                   description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
             ),
