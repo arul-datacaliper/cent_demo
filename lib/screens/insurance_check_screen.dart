@@ -98,16 +98,15 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
           },
           "planDeductibleOOP": {"deductible": "\$1,500", "oopMax": "\$5,000"},
           "roleNotes": {"providerRole": "PROVIDER ROLE OTHER"},
-          
         },
         "financials": {
-            "deductibleTotal": 2500.00,
-            "deductibleMet": 555.00, // example
-            "oopMaxTotal": 5500.00,
-            "oopMet": 820.00, // example
-            "coinsurancePercent": 20, // 20% after deductible
-            "specialistCopay": 75.00, // $75 per visit
-          },
+          "deductibleTotal": 2500.00,
+          "deductibleMet": 555.00, // example
+          "oopMaxTotal": 5500.00,
+          "oopMet": 820.00, // example
+          "coinsurancePercent": 20, // 20% after deductible
+          "specialistCopay": 75.00, // $75 per visit
+        },
       };
 
       setState(() {
@@ -126,23 +125,22 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
       (v == null || v.trim().isEmpty) ? 'Required' : null;
 
   String _fmtCurrency(num? v) => v == null ? '—' : '\$${v.toStringAsFixed(0)}';
-double _safeDiv(num a, num b) => (b == 0) ? 0.0 : (a / b);
+  double _safeDiv(num a, num b) => (b == 0) ? 0.0 : (a / b);
 
-String _buildFinancialNarrative(Map<String, dynamic> f) {
-  final dedTotal = (f['deductibleTotal'] ?? 0).toDouble();
-  final dedMet   = (f['deductibleMet'] ?? 0).toDouble();
-  final dedLeft  = (dedTotal - dedMet).clamp(0, dedTotal);
-  final coins    = (f['coinsurancePercent'] ?? 0).toInt();
-  final oopMax   = (f['oopMaxTotal'] ?? 0).toDouble();
+  String _buildFinancialNarrative(Map<String, dynamic> f) {
+    final dedTotal = (f['deductibleTotal'] ?? 0).toDouble();
+    final dedMet = (f['deductibleMet'] ?? 0).toDouble();
+    final dedLeft = (dedTotal - dedMet).clamp(0, dedTotal);
+    final coins = (f['coinsurancePercent'] ?? 0).toInt();
+    final oopMax = (f['oopMaxTotal'] ?? 0).toDouble();
 
-  return 'Your annual deductible is ${_fmtCurrency(dedTotal)}, and you have '
-         '${_fmtCurrency(dedLeft)} left to meet it. Until you meet that amount, '
-         'you’ll pay the full allowed cost for immunotherapy visits. Once your '
-         'deductible is met, you’ll pay $coins% of the allowed cost for these services '
-         'until your total out-of-pocket spending reaches ${_fmtCurrency(oopMax)}, '
-         'at which point insurance will pay 100% for the rest of the year.';
-}
-    
+    return 'Your annual deductible is ${_fmtCurrency(dedTotal)}, and you have '
+        '${_fmtCurrency(dedLeft)} left to meet it. Until you meet that amount, '
+        'you’ll pay the full allowed cost for immunotherapy visits. Once your '
+        'deductible is met, you’ll pay $coins% of the allowed cost for these services '
+        'until your total out-of-pocket spending reaches ${_fmtCurrency(oopMax)}, '
+        'at which point insurance will pay 100% for the rest of the year.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -176,44 +174,125 @@ String _buildFinancialNarrative(Map<String, dynamic> f) {
                       text: _error!,
                     ),
                   if (_data != null && !_isLoading) ...[
-                    _SectionHeader(title: 'Plan Coverage'),
-                    _PlanCoverageCard(data: _data!["planCoverage"] ?? {}),
-                    const SizedBox(height: 16),
-
-                    _SectionHeader(title: 'Other Payer Info'),
-                    _OtherPayerCard(data: _data!["otherPayerInfo"] ?? {}),
-                    const SizedBox(height: 16),
-
-                    _SectionHeader(title: 'Coverage Summary'),
-                    _SimpleNoteCard(
-                      title: 'Summary',
-                      text: _data!["coverageSummary"]?["summary"] ?? '—',
-                      icon: Icons.assignment,
-                    ),
-                    const SizedBox(height: 16),
-
-                    _SectionHeader(title: 'Miscellaneous Info'),
-                    _SimpleNoteCard(
-                      title: 'Info',
-                      text: _data!["miscInfo"]?["message"] ?? '—',
-                      icon: Icons.notes,
-                    ),
-                    const SizedBox(height: 16),
-
-                    _SectionHeader(title: 'Plan Benefit & Service Summary'),
-                    _BenefitSummaryCard(data: _data!["benefitSummary"] ?? {}),
-                    const SizedBox(height: 16),
-                    _SectionHeader(title: 'Costs at a Glance'),
-                    FinancialOverviewCard(data: _data!['financials'] ?? {}),
-                    const SizedBox(height: 16),
-                    _SimpleNoteCard(
-                      title: 'What this means',
-                      text: _buildFinancialNarrative(
-                        _data!['financials'] ?? {},
+                    SectionAccordion(
+                      title: 'Plan Coverage',
+                      icon: Icons.verified_user,
+                      initiallyExpanded: true,
+                      child: _PlanCoverageCard(
+                        data: _data!["planCoverage"] ?? {},
                       ),
-                      icon: Icons.insights,
                     ),
+                    const SizedBox(height: 12),
+                        SectionAccordion(
+                      title: 'Plan Benefit & Service Summary',
+                      icon: Icons.health_and_safety,
+                      initiallyExpanded: true,
+                      child: _BenefitSummaryCard(
+                        data: _data!["benefitSummary"] ?? {},
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    SectionAccordion(
+                      title: 'Costs at a Glance',
+                      icon: Icons.payments_outlined,
+                      initiallyExpanded: true,
+                      child: FinancialOverviewCard(
+                        data: _data!['financials'] ?? {},
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    SectionAccordion(
+                      title: 'What this means',
+                      icon: Icons.insights,
+                      initiallyExpanded: true,
+                      child: _SimpleNoteCard(
+                        title: 'Summary',
+                        text: _buildFinancialNarrative(
+                          _data!['financials'] ?? {},
+                        ),
+                        icon: Icons.summarize,
+                      ),
+                    ),
+const SizedBox(height: 12),
+                    SectionAccordion(
+                      title: 'Other Payer Info',
+                      icon: Icons.account_balance,
+                      initiallyExpanded: false,
+                      child: _OtherPayerCard(
+                        data: _data!["otherPayerInfo"] ?? {},
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    SectionAccordion(
+                      title: 'Coverage Summary',
+                      icon: Icons.assignment,
+                      initiallyExpanded: false,
+                      child: _SimpleNoteCard(
+                        title: 'Summary',
+                        text: _data!["coverageSummary"]?["summary"] ?? '—',
+                        icon: Icons.assignment,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // SectionAccordion(
+                    //   title: 'Miscellaneous Info',
+                    //   icon: Icons.notes,
+                    //   initiallyExpanded: false,
+                    //   child: _SimpleNoteCard(
+                    //     title: 'Info',
+                    //     text: _data!["miscInfo"]?["message"] ?? '—',
+                    //     icon: Icons.notes,
+                    //   ),
+                    // ),
+                    // const SizedBox(height: 12),
+
+                    // 🔓 This one starts OPEN
+                
                   ],
+
+                  // if (_data != null && !_isLoading) ...[
+                  //   // _SectionHeader(title: 'Plan Coverage'),
+                  //   // _PlanCoverageCard(data: _data!["planCoverage"] ?? {}),
+                  //   const SizedBox(height: 16),
+
+                  //   _SectionHeader(title: 'Other Payer Info'),
+                  //   _OtherPayerCard(data: _data!["otherPayerInfo"] ?? {}),
+                  //   const SizedBox(height: 16),
+
+                  //   _SectionHeader(title: 'Coverage Summary'),
+                  //   _SimpleNoteCard(
+                  //     title: 'Summary',
+                  //     text: _data!["coverageSummary"]?["summary"] ?? '—',
+                  //     icon: Icons.assignment,
+                  //   ),
+                  //   const SizedBox(height: 16),
+
+                  //   _SectionHeader(title: 'Miscellaneous Info'),
+                  //   _SimpleNoteCard(
+                  //     title: 'Info',
+                  //     text: _data!["miscInfo"]?["message"] ?? '—',
+                  //     icon: Icons.notes,
+                  //   ),
+                  //   const SizedBox(height: 16),
+
+                  //   _SectionHeader(title: 'Plan Benefit & Service Summary'),
+                  //   _BenefitSummaryCard(data: _data!["benefitSummary"] ?? {}),
+                  //   const SizedBox(height: 16),
+                  //   _SectionHeader(title: 'Costs at a Glance'),
+                  //   FinancialOverviewCard(data: _data!['financials'] ?? {}),
+                  //   const SizedBox(height: 16),
+                  //   _SimpleNoteCard(
+                  //     title: 'What this means',
+                  //     text: _buildFinancialNarrative(
+                  //       _data!['financials'] ?? {},
+                  //     ),
+                  //     icon: Icons.insights,
+                  //   ),
+                  // ],
                 ],
               ),
             ),
@@ -742,16 +821,22 @@ class FinancialOverviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final deductibleTotal = (data['deductibleTotal'] ?? 0).toDouble();
-    final deductibleMet   = (data['deductibleMet'] ?? 0).toDouble();
-    final deductibleLeft  = (deductibleTotal - deductibleMet).clamp(0, deductibleTotal);
-    final deductiblePct   = _safeDiv(deductibleMet, deductibleTotal).clamp(0.0, 1.0);
+    final deductibleMet = (data['deductibleMet'] ?? 0).toDouble();
+    final deductibleLeft = (deductibleTotal - deductibleMet).clamp(
+      0,
+      deductibleTotal,
+    );
+    final deductiblePct = _safeDiv(
+      deductibleMet,
+      deductibleTotal,
+    ).clamp(0.0, 1.0);
 
     final oopMaxTotal = (data['oopMaxTotal'] ?? 0).toDouble();
-    final oopMet      = (data['oopMet'] ?? 0).toDouble();
-    final oopPct      = _safeDiv(oopMet, oopMaxTotal).clamp(0.0, 1.0);
+    final oopMet = (data['oopMet'] ?? 0).toDouble();
+    final oopPct = _safeDiv(oopMet, oopMaxTotal).clamp(0.0, 1.0);
 
-    final copay       = (data['specialistCopay'] ?? 0).toDouble();
-    final coins       = (data['coinsurancePercent'] ?? 0).toInt();
+    final copay = (data['specialistCopay'] ?? 0).toDouble();
+    final coins = (data['coinsurancePercent'] ?? 0).toInt();
 
     return _CardContainer(
       child: Column(
@@ -763,8 +848,10 @@ class FinancialOverviewCard extends StatelessWidget {
               _IconDot(icon: Icons.payments_outlined),
               SizedBox(width: 12),
               Expanded(
-                child: Text('Financial Summary',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                child: Text(
+                  'Financial Summary',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
               ),
             ],
           ),
@@ -774,15 +861,22 @@ class FinancialOverviewCard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, c) {
               final narrow = c.maxWidth < 520;
-              final donut = _deductibleDonut(deductiblePct, deductibleMet, deductibleLeft, deductibleTotal);
+              final donut = _deductibleDonut(
+                deductiblePct,
+                deductibleMet,
+                deductibleLeft,
+                deductibleTotal,
+              );
               final facts = _quickFacts(copay, coins);
               return narrow
                   ? Column(children: [donut, const SizedBox(height: 16), facts])
-                  : Row(children: [
-                      Expanded(flex: 2, child: donut),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 3, child: facts),
-                    ]);
+                  : Row(
+                      children: [
+                        Expanded(flex: 2, child: donut),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 3, child: facts),
+                      ],
+                    );
             },
           ),
 
@@ -791,7 +885,10 @@ class FinancialOverviewCard extends StatelessWidget {
 
           // OOP progress bar
           const SizedBox(height: 8),
-          const Text('Out-of-Pocket Progress', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text(
+            'Out-of-Pocket Progress',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
@@ -839,11 +936,19 @@ class FinancialOverviewCard extends StatelessWidget {
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('${(pct * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                    const Text('Met', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      '${(pct * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const Text(
+                      'Met',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ],
-                )
+                ),
               ],
             ),
           ),
@@ -852,10 +957,14 @@ class FinancialOverviewCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Deductible', style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text(
+                  'Deductible',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 6),
                 Wrap(
-                  spacing: 8, runSpacing: 8,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     _pill('Total: ${_fmtCurrency(total)}', Colors.indigo),
                     _pill('Met: ${_fmtCurrency(met)}', Colors.green),
@@ -874,12 +983,19 @@ class FinancialOverviewCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Quick Facts', style: TextStyle(fontWeight: FontWeight.w700)),
+        const Text(
+          'Quick Facts',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 8, runSpacing: 8,
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            _pill('Specialist Copay: ${_fmtCurrency(copay)}', Colors.deepPurple),
+            _pill(
+              'Specialist Copay: ${_fmtCurrency(copay)}',
+              Colors.deepPurple,
+            ),
             _pill('Coinsurance: $coins%', Colors.teal),
           ],
         ),
@@ -894,7 +1010,10 @@ class FinancialOverviewCard extends StatelessWidget {
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+      child: Text(
+        text,
+        style: TextStyle(color: color, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
@@ -907,13 +1026,15 @@ class _IconDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(color: Color(0xFFE8F0FE), shape: BoxShape.circle),
+      decoration: const BoxDecoration(
+        color: Color(0xFFE8F0FE),
+        shape: BoxShape.circle,
+      ),
       padding: const EdgeInsets.all(10),
       child: Icon(icon, color: const Color(0xFF0d6efd)),
     );
   }
 }
-
 
 class _SubHeader extends StatelessWidget {
   final String text;
@@ -927,6 +1048,49 @@ class _SubHeader extends StatelessWidget {
         fontWeight: FontWeight.w800,
         fontSize: 14,
         color: Colors.black87,
+      ),
+    );
+  }
+}
+
+class SectionAccordion extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final bool initiallyExpanded;
+  final IconData? icon;
+
+  const SectionAccordion({
+    Key? key,
+    required this.title,
+    required this.child,
+    this.initiallyExpanded = false,
+    this.icon,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return _CardContainer(
+      child: Theme(
+        // remove the ExpansionTile divider line
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          maintainState: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+          childrenPadding: const EdgeInsets.only(left: 8, right: 8, bottom: 12),
+          leading: icon != null
+              ? Icon(icon, color: const Color(0xFF0d6efd))
+              : const Icon(Icons.folder_open, color: Color(0xFF0d6efd)),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Colors.black87,
+            ),
+          ),
+          children: [child],
+        ),
       ),
     );
   }
