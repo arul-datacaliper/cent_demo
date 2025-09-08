@@ -1,3 +1,6 @@
+import 'package:cent/screens/chat_screen.dart';
+import 'package:cent/screens/insurance_check_screen.dart';
+import 'package:cent/screens/insurance_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cent/screens/pollen_alerts_screen.dart';
 
@@ -45,6 +48,17 @@ class _DashBoardPageState extends State<DashBoardPage> {
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatScreen()),
+    );
+        },
+        backgroundColor: Colors.blue[600],
+        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+        tooltip: 'Chatbot',
+      ),
     );
   }
 
@@ -261,7 +275,12 @@ class _DashBoardPageState extends State<DashBoardPage> {
             _buildQuickAccessCard(
               icon: Icons.account_balance_wallet,
               title: 'Financial Alert',
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EligibilityScreen()),
+                );
+              },
             ),
             _buildQuickAccessCard(
               icon: Icons.accessible,
@@ -281,7 +300,12 @@ class _DashBoardPageState extends State<DashBoardPage> {
             _buildQuickAccessCard(
               icon: Icons.card_giftcard,
               title: 'Rewards',
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const InsuranceDetailsScreen()),
+                );
+              },
             ),
           ],
         ),
