@@ -1,5 +1,5 @@
-import 'package:cent/screens/pollen_alerts_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:cent/screens/pollen_alerts_screen.dart';
 
 class DashBoardPage extends StatefulWidget {
   const DashBoardPage({Key? key}) : super(key: key);
@@ -13,45 +13,47 @@ class _DashBoardPageState extends State<DashBoardPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 233, 226, 226),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 20),
-              _buildSearchBar(),
-              const SizedBox(height: 20),
-              _buildBanner(),
-              const SizedBox(height: 30),
-              _buildQuickAccess(context),
-              const SizedBox(height: 30),
-              _buildTodayAction(),
-              const SizedBox(height: 30),
-              _buildRecentAchievements(),
-              const SizedBox(height: 30),
-              
+    // Slightly brighter, cooler background
+    const scaffoldBg = Color(0xFFF4F8FF);
 
-            ],
+    return Scaffold(
+      backgroundColor: scaffoldBg,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 20),
+                  _buildSearchBar(),
+                  const SizedBox(height: 20),
+                  _buildBanner(),
+                  const SizedBox(height: 28),
+                  _buildQuickAccess(context),
+                  const SizedBox(height: 28),
+                  _buildTodayAction(),
+                  const SizedBox(height: 28),
+                  _buildRecentAchievements(),
+                ],
+              ),
+            ),
           ),
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
-
-    
   }
 
-  Widget _buildBottomNavigationBar() {
+  BottomNavigationBar _buildBottomNavigationBar() {
     return BottomNavigationBar(
       currentIndex: _currentIndex,
       onTap: (index) {
-        setState(() {
-          _currentIndex = index;
-        });
+        setState(() => _currentIndex = index);
+        // Optional: switch body content based on index
       },
       type: BottomNavigationBarType.fixed,
       selectedItemColor: Colors.blue[600],
@@ -59,346 +61,297 @@ class _DashBoardPageState extends State<DashBoardPage> {
       backgroundColor: Colors.white,
       elevation: 8,
       items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.schedule), label: 'Schedule'),
+        BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Tracking'),
+        BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Learning'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+      ],
+    );
+  }
+
+  // HEADER
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text(
+          'Andrew Donald!',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.schedule),
-          label: 'Schedule',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.bar_chart),
-          label: 'Tracking',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.menu_book),
-          label: 'Learning',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person),
-          label: 'Profile',
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton(
+              icon: const Icon(
+                Icons.notifications_outlined,
+                size: 28,
+                color: Colors.black54,
+              ),
+              onPressed: () {
+                // Handle notification tap
+              },
+            ),
+            Positioned(
+              right: 10,
+              top: 10,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
-}
 
-
-
-
-
-
-Widget _buildHeader() {
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      const Text(
-        'Andrew Donald !',
-        style: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
-      ),
-      Stack(
-        children: [
-          IconButton(
-            icon: const Icon(
-              Icons.notifications_outlined,
-              size: 28,
-              color: Colors.black54,
-            ),
-            onPressed: () {
-              // Handle notification tap
-            },
-          ),
-          Positioned(
-            right: 8,
-            top: 8,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ],
-  );
-}
-
-Widget _buildSearchBar() {
-  return Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.grey.withOpacity(0.1),
-          spreadRadius: 1,
-          blurRadius: 10,
-          offset: const Offset(0, 2),
-        ),
-      ],
-    ),
-    child: TextField(
-      decoration: InputDecoration(
-        hintText: 'Search Doctors',
-        hintStyle: TextStyle(color: Colors.grey[500]),
-        prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
-        border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-      ),
-    ),
-  );
-}
-
-Widget _buildBanner() {
-  return Container(
-    height: 180,
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: [Color(0xFF4FC3F7), Color(0xFF29B6F6)],
-      ),
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Stack(
-      children: [
-        Positioned(
-          right: 0,
-          top: 0,
-          bottom: 0,
-          child: ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topRight: Radius.circular(16),
-              bottomRight: Radius.circular(16),
-            ),
-            child: Image.asset(
-              'assets/images/doctors.png', // You'll need to add this image
-              fit: BoxFit.cover,
-              width: 180,
-              errorBuilder: (context, error, stackTrace) {
-                // Fallback when image is not found
-                return Container(
-                  width: 180,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.medical_services,
-                    size: 80,
-                    color: Colors.white54,
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        Positioned(
-          left: 20,
-          top: 20,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Expert Doctors,',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Text(
-                'Just a Click',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Text(
-                'Away',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 15),
-              ElevatedButton(
-                onPressed: () {
-                  // Handle book now
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFA726),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text(
-                  'Book Now',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-Widget _buildQuickAccessCard({
-  required IconData icon,
-  required String title,
-  required VoidCallback onTap,
-}) {
-  return GestureDetector(
-    onTap: onTap,
-    child: Container(
+  // SEARCH
+  Widget _buildSearchBar() {
+    return Container
+    (
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              size: 24,
-              color: Colors.blue[600],
-            ),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: 'Search Doctors',
+          hintStyle: TextStyle(color: Colors.grey[600]),
+          prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        ),
+      ),
+    );
+  }
+
+  // BANNER
+  Widget _buildBanner() {
+    return Container(
+      height: 180,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Color(0xFF66CCFF), Color(0xFF33BBF3)], // slightly brighter
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
           ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+              child: Image.asset(
+                'assets/images/doctors.png',
+                fit: BoxFit.cover,
+                width: 180,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: 180,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: const Icon(Icons.medical_services, size: 80, color: Colors.white70),
+                  );
+                },
               ),
             ),
           ),
+          Positioned(
+            left: 20,
+            top: 20,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _bannerLine('Expert Doctors,'),
+                _bannerLine('Just a Click'),
+                _bannerLine('Away'),
+                const SizedBox(height: 14),
+                ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFA726),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 0,
+                  ),
+                  child: const Text('Book Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
-    ),
-  );
-}
+    );
+  }
 
-Widget _buildQuickAccess(BuildContext context) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'Quick Access',
-        style: TextStyle(
+  Widget _bannerLine(String text) => Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          color: Colors.black87,
+          height: 1.15,
+        ),
+      );
+
+  // QUICK ACCESS
+  Widget _buildQuickAccess(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Quick Access',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+        ),
+        const SizedBox(height: 15),
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
+          childAspectRatio: 1.0,
+          children: [
+            _buildQuickAccessCard(
+              icon: Icons.access_time,
+              title: 'Smart Reminder',
+              onTap: () {},
+            ),
+            _buildQuickAccessCard(
+              icon: Icons.track_changes,
+              title: 'Adherence Tracker',
+              onTap: () {},
+            ),
+            _buildQuickAccessCard(
+              icon: Icons.account_balance_wallet,
+              title: 'Financial Alert',
+              onTap: () {},
+            ),
+            _buildQuickAccessCard(
+              icon: Icons.accessible,
+              title: 'Symptom Tracker',
+              onTap: () {},
+            ),
+            _buildQuickAccessCard(
+              icon: Icons.eco,
+              title: 'Pollen Alert',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PollenAlertPage()),
+                );
+              },
+            ),
+            _buildQuickAccessCard(
+              icon: Icons.card_giftcard,
+              title: 'Rewards',
+              onTap: () {},
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickAccessCard({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 24, color: Colors.blue[600]),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
-      const SizedBox(height: 15),
-      GridView.count(
-        crossAxisCount: 3,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 15,
-        mainAxisSpacing: 15,
-        childAspectRatio: 1.0,
-        children: [
-          _buildQuickAccessCard(
-            icon: Icons.access_time,
-            title: 'Smart Reminder',
-            onTap: () {},
-          ),
-          _buildQuickAccessCard(
-            icon: Icons.track_changes,
-            title: 'Adherence Tracker',
-            onTap: () {},
-          ),
-          _buildQuickAccessCard(
-            icon: Icons.account_balance_wallet,
-            title: 'Financial Alert',
-            onTap: () {},
-          ),
-          _buildQuickAccessCard(
-            icon: Icons.accessible,
-            title: 'Symptom Tracker',
-            onTap: () {},
-          ),
-          _buildQuickAccessCard(
-            icon: Icons.eco,
-            title: 'Pollen Alert',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PollenAlertPage()),
-              );
-            },
-          ),
-          _buildQuickAccessCard(
-            icon: Icons.card_giftcard,
-            title: 'Rewards',
-            onTap: () {},
-          ),
-        ],
-      ),
-    ],
-  );
-}
+    );
+  }
 
-Widget _buildTodayAction() {
+  // TODAY ACTION
+  Widget _buildTodayAction() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Today Action',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
         ),
         const SizedBox(height: 15),
         _buildActionCard(
           title: 'Morning Dose Reminder',
           subtitle: 'Due in 30 mins',
-          color: Colors.orange[100]!,
+          color: Colors.orange[50]!, // brighter, lighter
           iconColor: Colors.orange,
           icon: Icons.access_time,
         ),
@@ -406,7 +359,7 @@ Widget _buildTodayAction() {
         _buildActionCard(
           title: 'Symptom check complete',
           subtitle: 'Logged 2 hours ago',
-          color: Colors.green[100]!,
+          color: Colors.green[50]!, // brighter, lighter
           iconColor: Colors.green,
           icon: Icons.check_circle,
         ),
@@ -426,10 +379,7 @@ Widget _buildTodayAction() {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: iconColor!.withOpacity(0.3),
-          width: 1,
-        ),
+        border: Border.all(color: iconColor!.withOpacity(0.25), width: 1),
       ),
       child: Row(
         children: [
@@ -457,35 +407,25 @@ Widget _buildTodayAction() {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                 ),
               ],
             ),
           ),
-          Icon(
-            icon,
-            color: iconColor,
-            size: 24,
-          ),
+          Icon(icon, color: iconColor, size: 24),
         ],
       ),
     );
   }
 
+  // RECENT ACHIEVEMENTS
   Widget _buildRecentAchievements() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Recent Achievements',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
         ),
         const SizedBox(height: 15),
         _buildAchievementItem(
@@ -504,7 +444,6 @@ Widget _buildTodayAction() {
   }
 
   Widget _buildAchievementItem({
-
     required String title,
     required String subtitle,
     required IconData icon,
@@ -513,15 +452,8 @@ Widget _buildTodayAction() {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.green[100],
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            icon,
-            color: Colors.green[600],
-            size: 16,
-          ),
+          decoration: BoxDecoration(color: Colors.green[50], shape: BoxShape.circle),
+          child: Icon(icon, color: Colors.green[600], size: 16),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -537,16 +469,11 @@ Widget _buildTodayAction() {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
+              Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
             ],
           ),
         ),
       ],
     );
   }
+}
