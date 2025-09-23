@@ -25,10 +25,10 @@ class _ChatMessage {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  // TODO: change to your API base
+
  // static const String _baseUrl = 'http://localhost:5230';
-  static const String _baseUrl = 'http://10.0.2.2:5230';
-//static const String _baseUrl = 'http://192.168.x.x:5186';
+  //static const String _baseUrl = 'http://10.0.2.2:5230';
+  static const String _baseUrl = 'https://stage-fortifyguardian-api-bbf0cxa5bjc6bjay.eastus-01.azurewebsites.net';
 
 
 
