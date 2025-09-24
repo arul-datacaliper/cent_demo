@@ -41,6 +41,7 @@ dependencies:
   flutter_local_notifications: ^19.4.1
   http: ^1.1.0
   shared_preferences: ^2.2.2
+  dropdown_search: ^6.0.2
 
 dev_dependencies:
   flutter_test:

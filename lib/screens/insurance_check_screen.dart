@@ -1,7 +1,28 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 import '../services/pverify_service.dart';
+
+// Payer model class
+class Payer {
+  final String code;
+  final String name;
+  final String type;
+  final bool eligibility;
+  final bool claimStatus;
+
+  const Payer({
+    required this.code,
+    required this.name,
+    required this.type,
+    required this.eligibility,
+    required this.claimStatus,
+  });
+
+  @override
+  String toString() => name;
+}
 
 class EligibilityScreen extends StatefulWidget {
   const EligibilityScreen({Key? key}) : super(key: key);
@@ -19,10 +40,39 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
   DateTime? _dob;
   bool _isLoading = false;
   String? _error;
-
-  
+  Payer? _selectedPayer;
 
   Map<String, dynamic>? _data; // parsed/normalized eligibility response
+
+  // Payer data list (sorted by eligibility status, then alphabetically)
+  static const List<Payer> _payers = [
+    // Eligible payers first (sorted alphabetically)
+    Payer(code: '00283', name: 'AARP (A United HealthCare Insurance Company)', type: 'EDI', eligibility: true, claimStatus: true),
+    Payer(code: '00344', name: 'Absolute Total Care', type: 'EDI', eligibility: true, claimStatus: true),
+    Payer(code: 'BO10061', name: 'ACCESS IPA BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: '01410', name: 'Acclaim Inc', type: 'EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00736', name: 'ACE Property and Casualty Medicare Supplement', type: 'EDI', eligibility: true, claimStatus: false),
+    Payer(code: '000947', name: 'ACS Benefit Services', type: 'EDI', eligibility: true, claimStatus: true),
+    Payer(code: 'BO00013', name: 'Adavanced Primary Care Network BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: 'BO10002', name: 'ADOC aka ADVANCED DOCTORS OF ORANGE COUNTY BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: 'BO10049', name: 'ADVANCED MEDICAL DOCTORS OF CA BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: '06024', name: 'Administrative Concepts', type: 'EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00468', name: 'Administrative Services Inc', type: 'EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00345', name: 'Advantage by Bridgeway Health Solutions', type: 'EDI', eligibility: true, claimStatus: true),
+    Payer(code: '00346', name: 'Advantage by Buckeye Community Health Plan', type: 'EDI', eligibility: true, claimStatus: true),
+    Payer(code: '00347', name: 'Advantage by Managed Health Services', type: 'EDI', eligibility: true, claimStatus: true),
+    Payer(code: '00348', name: 'Advantage by Superior HealthPlan', type: 'EDI', eligibility: true, claimStatus: true),
+    Payer(code: 'BO10014', name: 'ADVANTAGE CARE IPA BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00738', name: 'Advantage Health Solutions', type: 'EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00292', name: 'ADVANTRA (TEXAS, NEW MEXICO, ARIZONA ONLY)', type: 'EDI', eligibility: true, claimStatus: false),
+    Payer(code: 'BO00123', name: 'Advantica BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    
+    // Non-eligible payers (sorted alphabetically)
+    Payer(code: 'DE001', name: 'AARP Dental', type: 'EDI', eligibility: false, claimStatus: false),
+    Payer(code: 'DE0407', name: 'ACEC Health Plans (Salt Lake City, UT)', type: 'EDI', eligibility: false, claimStatus: false),
+    Payer(code: 'DE0408', name: 'Administrative Services Only (ASO)', type: 'EDI', eligibility: false, claimStatus: false),
+    Payer(code: 'DE0409', name: 'Advantage Dental', type: 'EDI', eligibility: false, claimStatus: false),
+  ];
 
   @override
   void dispose() {
@@ -51,7 +101,18 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
   }
 
   Future<void> _fetchEligibility() async {
+    // Validate form fields
     if (!_formKey.currentState!.validate()) return;
+    
+    // Custom validation for payer selection
+    final payerValidation = _validatePayer(_selectedPayer);
+    if (payerValidation != null) {
+      setState(() {
+        _error = payerValidation;
+      });
+      return;
+    }
+    
     FocusScope.of(context).unfocus();
 
     setState(() {
@@ -73,7 +134,7 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
       
       // Step 2: Make eligibility request with user data
       final eligibilityData = await pverifyService.getEligibilitySummary(
-        payerName: _payerController.text.trim(),
+        payerName: _selectedPayer?.name ?? _payerController.text.trim(),
         memberID: _memberIdController.text.trim(),
         firstName: 'Test', // TODO: Add first name field
         lastName: 'Test1', // TODO: Add last name field  
@@ -101,6 +162,108 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
 
   String? _required(String? v) =>
       (v == null || v.trim().isEmpty) ? 'Required' : null;
+
+  String? _validatePayer(Payer? payer) {
+    if (payer == null) return 'Please select a payer';
+    if (!payer.eligibility) return 'Selected payer does not support eligibility checks';
+    return null;
+  }
+
+  Widget _buildPayerDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownSearch<Payer>(
+          items: (filter, loadProps) => _payers,
+          compareFn: (Payer item1, Payer item2) => item1.code == item2.code,
+          decoratorProps: DropDownDecoratorProps(
+            decoration: InputDecoration(
+              labelText: 'Payer Name',
+              hintText: 'Select or search for a payer',
+              border: const OutlineInputBorder(),
+              suffixIcon: const Icon(Icons.search),
+            ),
+          ),
+          itemAsString: (Payer payer) => payer.name,
+          popupProps: PopupProps.modalBottomSheet(
+            showSearchBox: true,
+            searchFieldProps: TextFieldProps(
+              decoration: InputDecoration(
+                hintText: 'Search payers...',
+                prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+                border: const OutlineInputBorder(),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFF0d6efd)),
+                ),
+              ),
+            ),
+            modalBottomSheetProps: ModalBottomSheetProps(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+            ),
+            itemBuilder: (context, payer, isSelected, isFocused) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                decoration: BoxDecoration(
+                  color: isSelected ? Color(0xFF0d6efd).withOpacity(0.1) : Colors.transparent,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey[200]!, width: 1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        payer.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    if (isSelected)
+                      Icon(
+                        Icons.check_circle,
+                        color: Color(0xFF0d6efd),
+                        size: 20,
+                      ),
+                  ],
+                ),
+              );
+            },
+            title: Container(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Select Payer',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ),
+          filterFn: (payer, filter) {
+            return payer.name.toLowerCase().contains(filter.toLowerCase()) ||
+                   payer.code.toLowerCase().contains(filter.toLowerCase());
+          },
+          selectedItem: _selectedPayer,
+          onChanged: (Payer? payer) {
+            setState(() {
+              _selectedPayer = payer;
+              _payerController.text = payer?.name ?? '';
+            });
+          },
+          validator: (payer) => _validatePayer(payer),
+        ),
+      ],
+    );
+  }
+
+
 
   Future<void> _testToken() async {
     try {
@@ -543,17 +706,7 @@ const SizedBox(height: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextFormField(
-                    controller: _payerController,
-                    decoration: const InputDecoration(
-                      labelText: 'Payer Name',
-                      hintText: 'e.g., UnitedHealthcare',
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.account_balance),
-                    ),
-                    validator: _required,
-                    textInputAction: TextInputAction.next,
-                  ),
+                  _buildPayerDropdown(),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _memberIdController,
