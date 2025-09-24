@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../services/pverify_service.dart';
 
 class EligibilityScreen extends StatefulWidget {
   const EligibilityScreen({Key? key}) : super(key: key);
@@ -18,6 +19,8 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
   DateTime? _dob;
   bool _isLoading = false;
   String? _error;
+
+  
 
   Map<String, dynamic>? _data; // parsed/normalized eligibility response
 
@@ -58,7 +61,18 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
     });
 
     try {
-      // TODO: Replace this mock with your real pVerify API call.
+      // Step 1: Get pVerify access token
+      final pverifyService = PVerifyService();
+      final token = await pverifyService.getAccessToken();
+      
+      if (token == null) {
+        throw Exception('Failed to get pVerify access token');
+      }
+      
+      print('✅ Got pVerify token: ${token.substring(0, 20)}...');
+      
+      // Step 2: Make eligibility request (placeholder for now)
+      // TODO: Implement actual eligibility API call with token
       await Future<void>.delayed(const Duration(milliseconds: 800));
 
       // Example normalized structure (adjust to your real response mapping).
@@ -80,7 +94,7 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
         "coverageSummary": {
           "summary": "Member has active benefits under CHOICE plan.",
         },
-        "miscInfo": {"message": "Eligibility verified successfully."},
+        "miscInfo": {"message": "Eligibility verified successfully with pVerify token."},
         "benefitSummary": {
           "inNetwork": {
             "service": "Specialist Office",
@@ -124,8 +138,91 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
   String? _required(String? v) =>
       (v == null || v.trim().isEmpty) ? 'Required' : null;
 
+  Future<void> _testToken() async {
+    try {
+      final pverifyService = PVerifyService();
+      
+      // Clear any existing token to force a fresh one
+      await pverifyService.clearToken();
+      
+      final token = await pverifyService.getAccessToken();
+      
+      if (token != null) {
+        final tokenInfo = pverifyService.getTokenInfo();
+        
+        // Show success dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text('Token Generated'),
+                ],
+              ),
+              content: Text(tokenInfo),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        // Show error dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.error, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Token Failed'),
+                ],
+              ),
+              content: const Text('Failed to generate pVerify access token. Check your credentials and network connection.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error testing token: $e');
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.error, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Error'),
+              ],
+            ),
+            content: Text('Error testing token: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
   String _fmtCurrency(num? v) => v == null ? '—' : '\$${v.toStringAsFixed(0)}';
-  double _safeDiv(num a, num b) => (b == 0) ? 0.0 : (a / b);
 
   String _buildFinancialNarrative(Map<String, dynamic> f) {
     final dedTotal = (f['deductibleTotal'] ?? 0).toDouble();
@@ -386,6 +483,19 @@ const SizedBox(height: 12),
                     validator: _required,
                   ),
                   const SizedBox(height: 16),
+                  // Debug: Test Token Generation
+                  SizedBox(
+                    height: 36,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.key, size: 16),
+                      label: const Text(
+                        'Test pVerify Token',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      onPressed: _isLoading ? null : _testToken,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   SizedBox(
                     height: 48,
                     child: ElevatedButton.icon(
@@ -436,66 +546,7 @@ class _CardContainer extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
 
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w800,
-        color: Colors.black87,
-      ),
-    );
-  }
-}
-
-class _TitleRow extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final IconData icon;
-
-  const _TitleRow({required this.title, this.subtitle, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFE8F0FE),
-            shape: BoxShape.circle,
-          ),
-          padding: const EdgeInsets.all(10),
-          child: Icon(icon, color: const Color(0xFF0d6efd)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if (subtitle != null)
-                Text(
-                  subtitle!,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _LoadingCard extends StatelessWidget {
   const _LoadingCard();
