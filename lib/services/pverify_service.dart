@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class PVerifyService {
   static const String _baseUrl = 'https://api.pverify.com/test';
   static const String _tokenUrl = '$_baseUrl/Token';
+  static const String _eligibilityUrl = '$_baseUrl/api/EligibilitySummary';
   
   // OAuth2 credentials (in production, these should be stored securely)
   static const String _clientId = 'c4cc14d3-e602-4755-91c0-4dcd611752d9';
@@ -177,6 +178,90 @@ class PVerifyService {
              'Stored Expiry: $expiryInfo';
     } catch (e) {
       return 'Error reading storage: $e';
+    }
+  }
+
+  /// Get eligibility summary from pVerify API
+  Future<Map<String, dynamic>?> getEligibilitySummary({
+    String? payerCode,
+    String? payerName,
+    String? memberID,
+    String? firstName,
+    String? lastName,
+    String? dob,
+  }) async {
+    try {
+      // Get valid access token
+      final token = await getAccessToken();
+      if (token == null) {
+        throw Exception('Unable to get access token');
+      }
+
+      // Use provided values or hardcoded defaults for testing
+      final requestBody = {
+        "payerCode": payerCode ?? "00192",
+        "payerName": payerName ?? "UHC",
+        "provider": {
+          "firstName": "",
+          "middleName": "",
+          "lastName": " test name",
+          "npi": "1234567890"
+        },
+        "subscriber": {
+          "firstName": firstName ?? "Test",
+          "dob": dob ?? "01/01/1950",
+          "lastName": lastName ?? "Test1",
+          "memberID": memberID ?? "1234567890"
+        },
+        "dependent": null,
+        "isSubscriberPatient": "True",
+        "doS_StartDate": "04/21/2020",
+        "doS_EndDate": "04/21/2020",
+        "PracticeTypeCode": "3",
+        "referenceId": "Pat MRN",
+        "Location": "Any location Name",
+        "IncludeTextResponse": "false",
+        "RequestSource": "TestAPI"
+      };
+
+      print('🔍 Making eligibility request to pVerify...');
+      print('Request payload: ${json.encode(requestBody)}');
+
+      final response = await http.post(
+        Uri.parse(_eligibilityUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Client-API-Id': _clientId, // Using client ID as Client-API-Id
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(requestBody),
+      );
+
+      print('📋 Response Status: ${response.statusCode}');
+      print('📋 Response Body: ${response.body}');
+      
+      // Also log to a more readable format if possible
+      try {
+        final prettyData = json.decode(response.body);
+        print('📋 Formatted Response:');
+        print(json.encode(prettyData).toString().replaceAll(',', ',\n  '));
+      } catch (e) {
+        print('📋 Raw response (not JSON): ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Eligibility request successful');
+        return data;
+      } else {
+        print('❌ Eligibility request failed');
+        print('Status: ${response.statusCode}');
+        print('Body: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Error in eligibility request: $e');
+      return null;
     }
   }
 }

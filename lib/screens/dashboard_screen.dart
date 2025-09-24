@@ -274,7 +274,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
             ),
             _buildQuickAccessCard(
               icon: Icons.account_balance_wallet,
-              title: 'Financial Alert',
+              title: 'Insurance Check',
               onTap: () {
                 Navigator.push(
                   context,
@@ -289,7 +289,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
             ),
             _buildQuickAccessCard(
               icon: Icons.eco,
-              title: 'Pollen Alert',
+              title: 'Education Hub',
               onTap: () {
                 Navigator.push(
                   context,
@@ -372,18 +372,32 @@ class _DashBoardPageState extends State<DashBoardPage> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
         ),
         const SizedBox(height: 15),
+         _buildActionCard(
+          title: 'Check Pollen Levels',
+          subtitle: '',
+          color: const Color.fromARGB(255, 237, 227, 212)!, // brighter, lighter
+          iconColor: Colors.orange,
+          icon: Icons.access_time,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PollenAlertPage()),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
         _buildActionCard(
           title: 'Morning Dose Reminder',
           subtitle: 'Due in 30 mins',
-          color: Colors.orange[50]!, // brighter, lighter
-          iconColor: Colors.orange,
+          color: const Color.fromARGB(255, 202, 206, 238), // brighter, lighter
+          iconColor: const Color.fromARGB(255, 15, 15, 231),
           icon: Icons.access_time,
         ),
         const SizedBox(height: 10),
         _buildActionCard(
           title: 'Symptom check complete',
           subtitle: 'Logged 2 hours ago',
-          color: Colors.green[50]!, // brighter, lighter
+          color: const Color.fromARGB(255, 233, 243, 234), // brighter, lighter
           iconColor: Colors.green,
           icon: Icons.check_circle,
         ),
@@ -397,15 +411,18 @@ class _DashBoardPageState extends State<DashBoardPage> {
     required Color color,
     required Color? iconColor,
     required IconData icon,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: iconColor!.withOpacity(0.25), width: 1),
-      ),
-      child: Row(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: iconColor!.withOpacity(0.25), width: 1),
+        ),
+        child: Row(
         children: [
           Container(
             width: 4,
@@ -438,6 +455,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
           ),
           Icon(icon, color: iconColor, size: 24),
         ],
+      ),
       ),
     );
   }
