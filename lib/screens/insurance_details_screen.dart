@@ -57,8 +57,18 @@ class _InsuranceDetailsScreenState extends State<InsuranceDetailsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Insurance Details'),
-        backgroundColor: Colors.blue[600],
+        title: const Text(
+          'Insurance Details',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: const Color(0xFF0d6efd),
+        elevation: 0,
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

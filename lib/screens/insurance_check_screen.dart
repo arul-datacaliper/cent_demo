@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import '../services/pverify_service.dart';
+import '../widgets/common_app_bar.dart';
 
 // Payer model class
 class Payer {
@@ -505,12 +506,7 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
         Colors.white; // Color(0xFFF4F8FF); // bright, soft background
     return Scaffold(
       backgroundColor: scaffoldBg,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black87,
-        title: const Text('Eligibility Check'),
-      ),
+      appBar: const CommonAppBar(title: 'Eligibility Check'),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
