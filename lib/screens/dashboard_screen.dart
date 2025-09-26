@@ -1,5 +1,6 @@
 import 'package:cent/screens/chat_screen.dart';
 import 'package:cent/screens/insurance_check_screen.dart';
+import 'package:cent/screens/new_insurance_check_screen.dart';
 import 'package:cent/screens/insurance_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cent/screens/pollen_alerts_screen.dart';
@@ -273,19 +274,24 @@ class _DashBoardPageState extends State<DashBoardPage> {
               onTap: () {},
             ),
             _buildQuickAccessCard(
+              icon: Icons.health_and_safety,
+              title: 'Insurance Overview',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NewInsuranceCheckScreen()),
+                );
+              },
+            ),
+            _buildQuickAccessCard(
               icon: Icons.account_balance_wallet,
-              title: 'Insurance Check',
+              title: 'Detailed Check',
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const EligibilityScreen()),
                 );
               },
-            ),
-            _buildQuickAccessCard(
-              icon: Icons.accessible,
-              title: 'Symptom Tracker',
-              onTap: () {},
             ),
             _buildQuickAccessCard(
               icon: Icons.eco,
@@ -375,7 +381,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
          _buildActionCard(
           title: 'Check Pollen Levels',
           subtitle: '',
-          color: const Color.fromARGB(255, 237, 227, 212)!, // brighter, lighter
+          color: const Color.fromARGB(255, 237, 227, 212), // brighter, lighter
           iconColor: Colors.orange,
           icon: Icons.access_time,
           onTap: () {

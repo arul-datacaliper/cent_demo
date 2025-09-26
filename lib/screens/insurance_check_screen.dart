@@ -146,6 +146,16 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
         throw Exception('Failed to get eligibility data from pVerify');
       }
 
+      print('🔍 Raw pVerify API Response Keys: ${eligibilityData.keys.toList()}');
+      
+      // Check for PlanCoverageSummary specifically
+      if (eligibilityData.containsKey('PlanCoverageSummary')) {
+        print('✅ Found PlanCoverageSummary: ${eligibilityData['PlanCoverageSummary']}');
+      } else {
+        print('⚠️ PlanCoverageSummary not found in response');
+        print('📋 Available top-level keys: ${eligibilityData.keys.toList()}');
+      }
+
       // Process the real pVerify response
       final processedData = _processEligibilityResponse(eligibilityData);
 
@@ -352,26 +362,84 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
 
   String _fmtCurrency(num? v) => v == null ? '—' : '\$${v.toStringAsFixed(0)}';
 
+  /// Helper function to extract field values with multiple possible paths
+  String _extractField(Map<String, dynamic> apiResponse, List<String> possiblePaths, String defaultValue) {
+    for (String path in possiblePaths) {
+      final keys = path.split('.');
+      dynamic current = apiResponse;
+      
+      bool foundValue = true;
+      for (String key in keys) {
+        if (current is Map<String, dynamic> && current.containsKey(key)) {
+          current = current[key];
+        } else {
+          foundValue = false;
+          break;
+        }
+      }
+      
+      if (foundValue && current != null && current.toString().trim().isNotEmpty) {
+        print('✅ Found ${possiblePaths.first} at path: $path = $current');
+        return current.toString();
+      }
+    }
+    
+    print('⚠️ Could not find ${possiblePaths.first} in any of these paths: $possiblePaths');
+    return defaultValue;
+  }
+
   /// Process pVerify API response and normalize it to our expected format
   Map<String, dynamic> _processEligibilityResponse(Map<String, dynamic> apiResponse) {
     try {
       print('🔄 Processing pVerify response...');
       
-      // Extract main response data
-      final eligibility = apiResponse['EligibilityStatus'] ?? {};
-      final planInfo = apiResponse['PlanInformation'] ?? {};
+      // Extract main response data for logging
+      final planCoverageSummary = apiResponse['PlanCoverageSummary'] ?? {};
       final benefitInfo = apiResponse['BenefitInformation'] ?? {};
+      final deductibleOOPSummary = apiResponse['HBPC_Deductible_OOP_Summary'] ?? {};
+      final dmeSummary = apiResponse['DMESummary'] ?? {};
+      
+      // Extract additional service summaries for office visit, ER, and allergy immunotherapy data
+      final primaryCareSummary = apiResponse['TelemedicinePrimaryCareSummary'] ?? {};
+      final specialistSummary = apiResponse['TelemedicineSpecialistSummary'] ?? {};
+      final hospitalOutPatientSummary = apiResponse['HospitalOutPatientSummary'] ?? {};
+      final professionalPhysicianSummary = apiResponse['ProfessionalPhysicianVisitInpatientSummary'] ?? {};
+      
+      print('📊 PlanCoverageSummary found: $planCoverageSummary');
+      print('💰 HBPC_Deductible_OOP_Summary found: $deductibleOOPSummary');
+      print('🔸 BenefitInformation found: $benefitInfo');
+      print('🏥 DMESummary found: $dmeSummary');
+      print('🩺 TelemedicinePrimaryCareSummary found: $primaryCareSummary');
+      print('👨‍⚕️ TelemedicineSpecialistSummary found: $specialistSummary');
+      print('🏥 HospitalOutPatientSummary found: $hospitalOutPatientSummary');
+      print('👩‍⚕️ ProfessionalPhysicianVisitInpatientSummary found: $professionalPhysicianSummary');
+     
       
       // Normalize the response to our expected structure
       return {
         "planCoverage": {
-          "status": eligibility['Status'] ?? 'Unknown',
-          "effectiveDate": eligibility['EffectiveDate'] ?? '—',
-          "planName": planInfo['PlanName'] ?? '—',
-          "selfFundedPlan": planInfo['SelfFundedPlan'] ?? '—',
-          "policyType": planInfo['PolicyType'] ?? '—',
-          "groupNumber": planInfo['GroupNumber'] ?? '—',
-          "patientGender": eligibility['PatientGender'] ?? '—',
+          // Direct access to PlanCoverageSummary fields
+          "status": planCoverageSummary['Status']?.toString() ?? 'Unknown',
+          "effectiveDate": planCoverageSummary['EffectiveDate']?.toString() ?? '—',
+          "expiryDate": planCoverageSummary['ExpiryDate']?.toString() ?? '—',
+          "planName": planCoverageSummary['PlanName']?.toString() ?? '—',
+          "selfFundedPlan": planCoverageSummary['SelfFundedPlan']?.toString() ?? '—',
+          "policyType": planCoverageSummary['PolicyType']?.toString() ?? '—',
+          "groupNumber": planCoverageSummary['GroupNumber']?.toString() ?? '—',
+          "groupName": planCoverageSummary['GroupName']?.toString() ?? '—',
+          "planNetworkID": planCoverageSummary['PlanNetworkID']?.toString() ?? '—',
+          "planNetworkName": planCoverageSummary['PlanNetworkName']?.toString() ?? '—',
+          "subscriberRelationship": planCoverageSummary['SubscriberRelationship']?.toString() ?? '—',
+          "planNumber": planCoverageSummary['PlanNumber']?.toString() ?? '—',
+          "hraHsaLimitations": planCoverageSummary['HRAorHSALimitationsRemaining']?.toString() ?? '—',
+          "lastUpdatedEDI": planCoverageSummary['LastUpdatedDateOfEDI']?.toString() ?? '—',
+          
+          // Keep patient gender from other sources since it's not in PlanCoverageSummary
+          "patientGender": _extractField(apiResponse, [
+            'EligibilityStatus.PatientGender',
+            'PatientGender',
+            'Gender'
+          ], '—'),
         },
         "otherPayerInfo": {
           "name": apiResponse['OtherPayerName'] ?? '—',
@@ -379,93 +447,164 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
           "notes": apiResponse['OtherPayerNotes'] ?? '—',
         },
         "coverageSummary": {
-          "summary": eligibility['Summary'] ?? 'Eligibility verified via pVerify API.',
+          "summary": _extractField(apiResponse, [
+            'EligibilityStatus.Summary',
+            'PlanCoverageSummary.Summary',
+            'Summary'
+          ], 'Eligibility verified via pVerify API.'),
         },
         "miscInfo": {
           "message": "Real-time eligibility verified via pVerify API.",
         },
         "benefitSummary": {
           "inNetwork": {
-            "service": benefitInfo['InNetworkService'] ?? 'Specialist Office',
-            "serviceCovered": benefitInfo['InNetworkCovered'] ?? 'YES',
-            "coPay": benefitInfo['InNetworkCopay'] ?? '—',
-            "coIns": benefitInfo['InNetworkCoinsurance'] ?? '—',
-            "authRequired": benefitInfo['InNetworkAuth'] ?? '—',
+            "service": "DME (Durable Medical Equipment)",
+            "serviceCovered": dmeSummary['ServiceCoveredInNet'],
+            "coPay": dmeSummary['CoPayInNet']?['Value'],
+            "coIns": dmeSummary['CoInsInNet']?['Value'],
+            "authRequired": dmeSummary['InNetServiceAuthorizationInfo'] != null ? "YES" : "NO",
           },
           "outNetwork": {
-            "service": benefitInfo['OutNetworkService'] ?? 'Specialist Office',
-            "serviceCovered": benefitInfo['OutNetworkCovered'] ?? 'YES',
-            "coPay": benefitInfo['OutNetworkCopay'] ?? '—',
-            "coIns": benefitInfo['OutNetworkCoinsurance'] ?? '—',
-            "authRequired": benefitInfo['OutNetworkAuth'] ?? '—',
+            "service": "DME (Durable Medical Equipment)",
+            "serviceCovered": dmeSummary['ServiceCoveredOutNet'],
+            "coPay": dmeSummary['CoPayOutNet']?['Value'],
+            "coIns": dmeSummary['CoInsOutNet']?['Value'],
+            "authRequired": dmeSummary['OutNetServiceAuthorizationInfo'] != null ? "YES" : "NO",
+          },
+          // Add allergy immunotherapy service details
+          "allergyImmunotherapy": {
+            "service": "Allergy Immunotherapy (Allergy Shots)",
+            "serviceCovered": specialistSummary['ServiceCoveredInNet'] ?? primaryCareSummary['ServiceCoveredInNet'],
+            "coPay": specialistSummary['CoPayInNet']?['Value'] ?? primaryCareSummary['CoPayInNet']?['Value'],
+            "coIns": specialistSummary['CoInsInNet']?['Value'] ?? primaryCareSummary['CoInsInNet']?['Value'],
+            "authRequired": (specialistSummary['InNetServiceAuthorizationInfo'] != null || primaryCareSummary['InNetServiceAuthorizationInfo'] != null) ? "YES" : "NO",
+            "frequency": "Multiple visits required over 6-12 months",
+            "phases": {
+              "buildUp": "Weekly visits for 3-6 months with increasing doses",
+              "maintenance": "Monthly visits for 3-5 years with consistent doses"
+            },
           },
           "planDeductibleOOP": {
-            "deductible": benefitInfo['Deductible'] ?? '—',
-            "oopMax": benefitInfo['OutOfPocketMax'] ?? '—'
+            // Use HBPC_Deductible_OOP_Summary data
+            "individualDeductibleInNet": deductibleOOPSummary['IndividualDeductibleInNet']?['Value']?.toString() ?? '—',
+            "individualDeductibleOutNet": deductibleOOPSummary['IndividualDeductibleOutNet']?['Value']?.toString() ?? '—',
+            "individualDeductibleRemainingInNet": deductibleOOPSummary['IndividualDeductibleRemainingInNet']?['Value']?.toString() ?? '—',
+            "individualDeductibleRemainingOutNet": deductibleOOPSummary['IndividualDeductibleRemainingOutNet']?['Value']?.toString() ?? '—',
+            "familyDeductibleInNet": deductibleOOPSummary['FamilyDeductibleInNet']?['Value']?.toString() ?? '—',
+            "familyDeductibleOutNet": deductibleOOPSummary['FamilyDeductibleOutNet']?['Value']?.toString() ?? '—',
+            "familyDeductibleRemainingInNet": deductibleOOPSummary['FamilyDeductibleRemainingInNet']?['Value']?.toString() ?? '—',
+            "familyDeductibleRemainingOutNet": deductibleOOPSummary['FamilyDeductibleRemainingOutNet']?['Value']?.toString() ?? '—',
+            "individualOOPInNet": deductibleOOPSummary['IndividualOOP_InNet']?['Value']?.toString() ?? '—',
+            "individualOOPOutNet": deductibleOOPSummary['IndividualOOP_OutNet']?['Value']?.toString() ?? '—',
+            "individualOOPRemainingInNet": deductibleOOPSummary['IndividualOOPRemainingInNet']?['Value']?.toString() ?? '—',
+            "individualOOPRemainingOutNet": deductibleOOPSummary['IndividualOOPRemainingOutNet']?['Value']?.toString() ?? '—',
+            "familyOOPInNet": deductibleOOPSummary['FamilyOOPInNet']?['Value']?.toString() ?? '—',
+            "familyOOPOutNet": deductibleOOPSummary['FamilyOOPOutNet']?['Value']?.toString() ?? '—',
+            "familyOOPRemainingInNet": deductibleOOPSummary['FamilyOOPRemainingInNet']?['Value']?.toString() ?? '—',
+            "familyOOPRemainingOutNet": deductibleOOPSummary['FamilyOOPRemainingOutNet']?['Value']?.toString() ?? '—',
           },
           "roleNotes": {
             "providerRole": apiResponse['ProviderRole'] ?? 'PROVIDER ROLE'
           },
         },
         "financials": {
-          "deductibleTotal": _parseAmount(benefitInfo['DeductibleTotal']) ?? 2500.00,
-          "deductibleMet": _parseAmount(benefitInfo['DeductibleMet']) ?? 555.00,
-          "oopMaxTotal": _parseAmount(benefitInfo['OOPMax']) ?? 5500.00,
-          "oopMet": _parseAmount(benefitInfo['OOPMet']) ?? 820.00,
-          "coinsurancePercent": _parsePercent(benefitInfo['CoinsurancePercent']) ?? 20,
-          "specialistCopay": _parseAmount(benefitInfo['SpecialistCopay']) ?? 75.00,
+          // Use actual HBPC_Deductible_OOP_Summary data ONLY - no fallback values
+          "deductibleTotal": _parseAmount(deductibleOOPSummary['IndividualDeductibleInNet']?['Value']),
+          "deductibleMet": _parseAmount(deductibleOOPSummary['IndividualDeductibleInNet']?['Value']) != null && 
+                          _parseAmount(deductibleOOPSummary['IndividualDeductibleRemainingInNet']?['Value']) != null 
+                          ? (_parseAmount(deductibleOOPSummary['IndividualDeductibleInNet']?['Value'])! - 
+                             _parseAmount(deductibleOOPSummary['IndividualDeductibleRemainingInNet']?['Value'])!)
+                          : null,
+          "oopMaxTotal": _parseAmount(deductibleOOPSummary['IndividualOOP_InNet']?['Value']),
+          "oopMet": _parseAmount(deductibleOOPSummary['IndividualOOP_InNet']?['Value']) != null && 
+                   _parseAmount(deductibleOOPSummary['IndividualOOPRemainingInNet']?['Value']) != null 
+                   ? (_parseAmount(deductibleOOPSummary['IndividualOOP_InNet']?['Value'])! - 
+                      _parseAmount(deductibleOOPSummary['IndividualOOPRemainingInNet']?['Value'])!)
+                   : null,
+          "coinsurancePercent": _parsePercent(dmeSummary['CoInsInNet']?['Value']),
+          "specialistCopay": _parseAmount(dmeSummary['CoPayInNet']?['Value']),
+          "dmeCoinsuranceInNet": dmeSummary['CoInsInNet']?['Value'],
+          "dmeCoinsuranceOutNet": dmeSummary['CoInsOutNet']?['Value'],
+          "dmeCopayInNet": dmeSummary['CoPayInNet']?['Value'],
+          "dmeCopayOutNet": dmeSummary['CoPayOutNet']?['Value'],
+          
+          // Store raw HBPC values for comprehensive display - API values only
+          "individualDeductibleInNet": deductibleOOPSummary['IndividualDeductibleInNet']?['Value']?.toString(),
+          "individualDeductibleOutNet": deductibleOOPSummary['IndividualDeductibleOutNet']?['Value']?.toString(),
+          "individualDeductibleMetInNet": _parseAmount(deductibleOOPSummary['IndividualDeductibleInNet']?['Value']) != null && 
+                                         _parseAmount(deductibleOOPSummary['IndividualDeductibleRemainingInNet']?['Value']) != null 
+                                         ? (_parseAmount(deductibleOOPSummary['IndividualDeductibleInNet']?['Value'])! - 
+                                            _parseAmount(deductibleOOPSummary['IndividualDeductibleRemainingInNet']?['Value'])!).toString()
+                                         : null,
+          "familyDeductibleInNet": deductibleOOPSummary['FamilyDeductibleInNet']?['Value']?.toString(),
+          "familyDeductibleOutNet": deductibleOOPSummary['FamilyDeductibleOutNet']?['Value']?.toString(),
+          "individualOOPInNet": deductibleOOPSummary['IndividualOOP_InNet']?['Value']?.toString(),
+          "individualOOPOutNet": deductibleOOPSummary['IndividualOOP_OutNet']?['Value']?.toString(),
+          "individualOOPMetInNet": _parseAmount(deductibleOOPSummary['IndividualOOP_InNet']?['Value']) != null && 
+                                  _parseAmount(deductibleOOPSummary['IndividualOOPRemainingInNet']?['Value']) != null 
+                                  ? (_parseAmount(deductibleOOPSummary['IndividualOOP_InNet']?['Value'])! - 
+                                     _parseAmount(deductibleOOPSummary['IndividualOOPRemainingInNet']?['Value'])!).toString()
+                                  : null,
+          "familyOOPInNet": deductibleOOPSummary['FamilyOOPInNet']?['Value']?.toString(),
+          "familyOOPOutNet": deductibleOOPSummary['FamilyOOPOutNet']?['Value']?.toString(),
+          
+          // Additional detailed information from HBPC - API values only
+          "familyDeductibleTotal": _parseAmount(deductibleOOPSummary['FamilyDeductibleInNet']?['Value']),
+          "familyDeductibleRemaining": _parseAmount(deductibleOOPSummary['FamilyDeductibleRemainingInNet']?['Value']),
+          "familyOOPTotal": _parseAmount(deductibleOOPSummary['FamilyOOPInNet']?['Value']),
+          "familyOOPRemaining": _parseAmount(deductibleOOPSummary['FamilyOOPRemainingInNet']?['Value']),
         },
       };
     } catch (e) {
       print('⚠️ Error processing pVerify response: $e');
       
-      // Return a fallback structure with API response info
+      // Return empty structure on error - no mock data
       return {
         "planCoverage": {
-          "status": "API Response Received",
-          "effectiveDate": DateTime.now().toString().substring(0, 10),
-          "planName": "pVerify Response",
-          "selfFundedPlan": "—",
-          "policyType": "API",
-          "groupNumber": "—",
-          "patientGender": "—",
+          "status": "Error processing API response",
+          "effectiveDate": null,
+          "planName": null,
+          "selfFundedPlan": null,
+          "policyType": null,
+          "groupNumber": null,
+          "patientGender": null,
         },
         "otherPayerInfo": {
-          "name": "—",
-          "id": "—",
-          "notes": "Response received from pVerify API",
+          "name": null,
+          "id": null,
+          "notes": "Error processing pVerify API response: $e",
         },
         "coverageSummary": {
-          "summary": "Eligibility response received from pVerify API. Response structure may need adjustment.",
+          "summary": "Error processing eligibility response from pVerify API.",
         },
         "miscInfo": {
-          "message": "Raw API response available for review.",
+          "message": "Error occurred during API response processing.",
         },
         "benefitSummary": {
           "inNetwork": {
-            "service": "API Response",
-            "serviceCovered": "YES",
-            "coPay": "—",
-            "coIns": "—",
-            "authRequired": "—",
+            "service": null,
+            "serviceCovered": null,
+            "coPay": null,
+            "coIns": null,
+            "authRequired": null,
           },
           "outNetwork": {
-            "service": "API Response",
-            "serviceCovered": "YES",
-            "coPay": "—",
-            "coIns": "—",
-            "authRequired": "—",
+            "service": null,
+            "serviceCovered": null,
+            "coPay": null,
+            "coIns": null,
+            "authRequired": null,
           },
-          "planDeductibleOOP": {"deductible": "—", "oopMax": "—"},
-          "roleNotes": {"providerRole": "API RESPONSE"},
+          "planDeductibleOOP": {},
+          "roleNotes": {"providerRole": null},
         },
         "financials": {
-          "deductibleTotal": 2500.00,
-          "deductibleMet": 555.00,
-          "oopMaxTotal": 5500.00,
-          "oopMet": 820.00,
-          "coinsurancePercent": 20,
-          "specialistCopay": 75.00,
+          "deductibleTotal": null,
+          "deductibleMet": null,
+          "oopMaxTotal": null,
+          "oopMet": null,
+          "coinsurancePercent": null,
+          "specialistCopay": null,
         },
       };
     }
@@ -527,125 +666,36 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
                       text: _error!,
                     ),
                   if (_data != null && !_isLoading) ...[
-                    SectionAccordion(
-                      title: 'Plan Coverage',
-                      icon: Icons.verified_user,
-                      initiallyExpanded: true,
-                      child: _PlanCoverageCard(
-                        data: _data!["planCoverage"] ?? {},
-                      ),
+                    // Plan Overview Section
+                    _PlanOverviewCard(
+                      data: _data!["planCoverage"] ?? {},
                     ),
-                    const SizedBox(height: 12),
-                        SectionAccordion(
-                      title: 'Plan Benefit & Service Summary',
-                      icon: Icons.health_and_safety,
-                      initiallyExpanded: true,
-                      child: _BenefitSummaryCard(
-                        data: _data!["benefitSummary"] ?? {},
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
-                    SectionAccordion(
-                      title: 'Costs at a Glance',
-                      icon: Icons.payments_outlined,
-                      initiallyExpanded: true,
-                      child: FinancialOverviewCard(
-                        data: _data!['financials'] ?? {},
-                      ),
+                    // Year-to-Date Progress Section
+                    _YearToDateProgressCard(
+                      data: _data!['financials'] ?? {},
                     ),
+                    const SizedBox(height: 16),
+
+                    // What You Pay for Common Services Section
+                    _CommonServicesCard(
+                      data: _data!["benefitSummary"] ?? {},
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Primary Care Provider Section (placeholder)
+                    _PrimaryCareProviderCard(),
+                    const SizedBox(height: 16),
+
+                    // Prior Authorization Notes Section
+                    _PriorAuthorizationCard(),
+                    const SizedBox(height: 16),
+
+                    // Footer Disclaimer
+                    _DisclaimerFooter(),
                     const SizedBox(height: 12),
-
-                    SectionAccordion(
-                      title: 'What this means',
-                      icon: Icons.insights,
-                      initiallyExpanded: true,
-                      child: _SimpleNoteCard(
-                        title: 'Summary',
-                        text: _buildFinancialNarrative(
-                          _data!['financials'] ?? {},
-                        ),
-                        icon: Icons.summarize,
-                      ),
-                    ),
-const SizedBox(height: 12),
-                    SectionAccordion(
-                      title: 'Other Payer Info',
-                      icon: Icons.account_balance,
-                      initiallyExpanded: false,
-                      child: _OtherPayerCard(
-                        data: _data!["otherPayerInfo"] ?? {},
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    SectionAccordion(
-                      title: 'Coverage Summary',
-                      icon: Icons.assignment,
-                      initiallyExpanded: false,
-                      child: _SimpleNoteCard(
-                        title: 'Summary',
-                        text: _data!["coverageSummary"]?["summary"] ?? '—',
-                        icon: Icons.assignment,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // SectionAccordion(
-                    //   title: 'Miscellaneous Info',
-                    //   icon: Icons.notes,
-                    //   initiallyExpanded: false,
-                    //   child: _SimpleNoteCard(
-                    //     title: 'Info',
-                    //     text: _data!["miscInfo"]?["message"] ?? '—',
-                    //     icon: Icons.notes,
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 12),
-
-                    // 🔓 This one starts OPEN
-                
                   ],
-
-                  // if (_data != null && !_isLoading) ...[
-                  //   // _SectionHeader(title: 'Plan Coverage'),
-                  //   // _PlanCoverageCard(data: _data!["planCoverage"] ?? {}),
-                  //   const SizedBox(height: 16),
-
-                  //   _SectionHeader(title: 'Other Payer Info'),
-                  //   _OtherPayerCard(data: _data!["otherPayerInfo"] ?? {}),
-                  //   const SizedBox(height: 16),
-
-                  //   _SectionHeader(title: 'Coverage Summary'),
-                  //   _SimpleNoteCard(
-                  //     title: 'Summary',
-                  //     text: _data!["coverageSummary"]?["summary"] ?? '—',
-                  //     icon: Icons.assignment,
-                  //   ),
-                  //   const SizedBox(height: 16),
-
-                  //   _SectionHeader(title: 'Miscellaneous Info'),
-                  //   _SimpleNoteCard(
-                  //     title: 'Info',
-                  //     text: _data!["miscInfo"]?["message"] ?? '—',
-                  //     icon: Icons.notes,
-                  //   ),
-                  //   const SizedBox(height: 16),
-
-                  //   _SectionHeader(title: 'Plan Benefit & Service Summary'),
-                  //   _BenefitSummaryCard(data: _data!["benefitSummary"] ?? {}),
-                  //   const SizedBox(height: 16),
-                  //   _SectionHeader(title: 'Costs at a Glance'),
-                  //   FinancialOverviewCard(data: _data!['financials'] ?? {}),
-                  //   const SizedBox(height: 16),
-                  //   _SimpleNoteCard(
-                  //     title: 'What this means',
-                  //     text: _buildFinancialNarrative(
-                  //       _data!['financials'] ?? {},
-                  //     ),
-                  //     icon: Icons.insights,
-                  //   ),
-                  // ],
                 ],
               ),
             ),
@@ -870,10 +920,21 @@ class _PlanCoverageCard extends StatelessWidget {
     final status = (data["status"] ?? '—').toString();
     return _CardContainer(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Primary Information Section
+          const Text(
+            'Plan Information',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: Color(0xFF0d6efd),
+            ),
+          ),
+          const SizedBox(height: 12),
           _row(
             'Status',
-            status,
+            data["status"],
             valueStyle: TextStyle(
               fontWeight: FontWeight.w700,
               color: _statusColor(status),
@@ -881,37 +942,130 @@ class _PlanCoverageCard extends StatelessWidget {
             icon: Icons.verified_user,
           ),
           _row(
-            'Effective Date',
-            data["effectiveDate"] ?? '—',
-            icon: Icons.event,
-          ),
-          _row(
             'Plan Name',
-            data["planName"] ?? '—',
+            data["planName"],
             icon: Icons.medical_services,
           ),
           _row(
+            'Policy Type',
+            data["policyType"],
+            icon: Icons.description,
+          ),
+          _row(
+            'Plan Number',
+            data["planNumber"],
+            icon: Icons.confirmation_number,
+          ),
+          
+          const Divider(height: 24),
+          
+          // Coverage Dates Section
+          const Text(
+            'Coverage Period',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: Color(0xFF0d6efd),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _row(
+            'Effective Date',
+            data["effectiveDate"],
+            icon: Icons.event,
+          ),
+          _row(
+            'Expiry Date',
+            data["expiryDate"],
+            icon: Icons.event_available,
+          ),
+          
+          const Divider(height: 24),
+          
+          // Group Information Section
+          const Text(
+            'Group Details',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: Color(0xFF0d6efd),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _row('Group Number', data["groupNumber"], icon: Icons.tag),
+          _row(
+            'Group Name',
+            data["groupName"],
+            icon: Icons.group,
+          ),
+          _row(
+            'Subscriber Relationship',
+            data["subscriberRelationship"],
+            icon: Icons.family_restroom,
+          ),
+          
+          const Divider(height: 24),
+          
+          // Network Information Section
+          const Text(
+            'Network Information',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: Color(0xFF0d6efd),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _row(
+            'Plan Network ID',
+            data["planNetworkID"],
+            icon: Icons.network_check,
+          ),
+          _row(
+            'Plan Network Name',
+            data["planNetworkName"],
+            icon: Icons.wifi,
+          ),
+          
+          const Divider(height: 24),
+          
+          // Additional Information Section
+          const Text(
+            'Additional Details',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: Color(0xFF0d6efd),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _row(
             'Self Funded Plan',
-            data["selfFundedPlan"] ?? '—',
+            data["selfFundedPlan"],
             icon: Icons.account_balance,
           ),
           _row(
-            'Policy Type',
-            data["policyType"] ?? '—',
-            icon: Icons.description,
-          ),
-          _row('Group Number', data["groupNumber"] ?? '—', icon: Icons.tag),
-          _row(
             'Patient Gender',
-            data["patientGender"] ?? '—',
+            data["patientGender"],
             icon: Icons.person,
+          ),
+          _row(
+            'HRA/HSA Limitations',
+            data["hraHsaLimitations"],
+            icon: Icons.savings,
+          ),
+          _row(
+            'Last EDI Update',
+            data["lastUpdatedEDI"],
+            icon: Icons.update,
           ),
         ],
       ),
     );
   }
 
-  Widget _row(String k, String v, {IconData? icon, TextStyle? valueStyle}) {
+  Widget _row(String k, String? v, {IconData? icon, TextStyle? valueStyle}) {
+    final displayValue = v?.toString() ?? 'No Data';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -923,7 +1077,7 @@ class _PlanCoverageCard extends StatelessWidget {
           Expanded(
             child: Text(k, style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
-          Text(v, style: valueStyle),
+          Text(displayValue, style: valueStyle),
         ],
       ),
     );
@@ -939,15 +1093,16 @@ class _OtherPayerCard extends StatelessWidget {
     return _CardContainer(
       child: Column(
         children: [
-          _row('Name', data["name"] ?? '—', Icons.account_balance),
-          _row('ID', data["id"] ?? '—', Icons.confirmation_number),
-          _row('Notes', data["notes"] ?? '—', Icons.sticky_note_2_outlined),
+          _row('Name', data["name"], Icons.account_balance),
+          _row('ID', data["id"], Icons.confirmation_number),
+          _row('Notes', data["notes"], Icons.sticky_note_2_outlined),
         ],
       ),
     );
   }
 
-  Widget _row(String k, String v, IconData icon) {
+  Widget _row(String k, String? v, IconData icon) {
+    final displayValue = v?.toString() ?? 'No Data';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -957,7 +1112,7 @@ class _OtherPayerCard extends StatelessWidget {
           Expanded(
             child: Text(k, style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
-          Text(v),
+          Text(displayValue),
         ],
       ),
     );
@@ -1077,8 +1232,16 @@ class _BenefitSummaryCard extends StatelessWidget {
   }
 
   Widget _benefitRow(Map<String, dynamic> m) {
-    final covered = (m["serviceCovered"] ?? '—').toString().toUpperCase();
-    final coveredColor = covered == 'YES' ? Colors.green : Colors.redAccent;
+    final service = m["service"]?.toString() ?? 'No Data';
+    final serviceCovered = m["serviceCovered"]?.toString() ?? 'No Data';
+    final coPay = m["coPay"]?.toString() ?? 'No Data';
+    final coIns = m["coIns"]?.toString() ?? 'No Data';
+    final authRequired = m["authRequired"]?.toString() ?? 'No Data';
+    
+    final covered = serviceCovered.toUpperCase();
+    final coveredColor = covered == 'YES' ? Colors.green : 
+                        covered == 'NO DATA' ? Colors.grey : Colors.redAccent;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1086,13 +1249,13 @@ class _BenefitSummaryCard extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _chip(m["service"] ?? 'Service', color: Colors.indigo),
+            _chip(service, color: Colors.indigo),
             _chip(
-              'Covered: ${m["serviceCovered"] ?? "—"}',
+              'Covered: $serviceCovered',
               color: coveredColor,
             ),
-            _chip('CoPay: ${m["coPay"] ?? "—"}', color: Colors.orange),
-            _chip('CoIns: ${m["coIns"] ?? "—"}', color: Colors.teal),
+            _chip('CoPay: $coPay', color: Colors.orange),
+            _chip('CoIns: $coIns', color: Colors.teal),
           ],
         ),
         const SizedBox(height: 8),
@@ -1100,7 +1263,7 @@ class _BenefitSummaryCard extends StatelessWidget {
           children: [
             const Icon(Icons.verified_user, size: 18, color: Colors.grey),
             const SizedBox(width: 6),
-            Expanded(child: Text('Auth: ${m["authRequired"] ?? "—"}')),
+            Expanded(child: Text('Auth: $authRequired')),
           ],
         ),
       ],
@@ -1113,27 +1276,54 @@ class FinancialOverviewCard extends StatelessWidget {
   const FinancialOverviewCard({required this.data});
 
   double _safeDiv(num a, num b) => (b == 0) ? 0.0 : (a / b);
-  String _fmtCurrency(num? v) => v == null ? '—' : '\$${v.toStringAsFixed(0)}';
+  String _fmtCurrency(num? v) => v == null || v == 0 ? 'No Data' : '\$${v.toStringAsFixed(0)}';
+  double _parseAmount(String? value) {
+    if (value == null || value.isEmpty || value == '—') return 0.0;
+    final cleaned = value.replaceAll(RegExp(r'[^\d.]'), '');
+    return double.tryParse(cleaned) ?? 0.0;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final deductibleTotal = (data['deductibleTotal'] ?? 0).toDouble();
-    final deductibleMet = (data['deductibleMet'] ?? 0).toDouble();
-    final deductibleLeft = (deductibleTotal - deductibleMet).clamp(
-      0,
-      deductibleTotal,
-    );
-    final deductiblePct = _safeDiv(
-      deductibleMet,
-      deductibleTotal,
-    ).clamp(0.0, 1.0);
+    // Debug: Show what data is available
+    print('💳 FinancialOverviewCard received data keys: ${data.keys.toList()}');
+    print('💳 Raw data values:');
+    data.forEach((key, value) => print('  $key: $value'));
+    
+    // Use HBPC deductible data (individual in-network as primary)
+    final individualDeductibleInNet = _parseAmount(data['individualDeductibleInNet']?.toString());
+    final individualDeductibleMetInNet = _parseAmount(data['individualDeductibleMetInNet']?.toString());
+    final familyDeductibleInNet = _parseAmount(data['familyDeductibleInNet']?.toString());
+    
+    final individualOOPInNet = _parseAmount(data['individualOOPInNet']?.toString());
+    final individualOOPMetInNet = _parseAmount(data['individualOOPMetInNet']?.toString());
+    final familyOOPInNet = _parseAmount(data['familyOOPInNet']?.toString());
+    
+    // Debug: Show parsed values
+    print('💳 Parsed values:');
+    print('  individualDeductibleInNet: $individualDeductibleInNet');
+    print('  individualDeductibleMetInNet: $individualDeductibleMetInNet');
+    print('  individualOOPInNet: $individualOOPInNet');
+    print('  individualOOPMetInNet: $individualOOPMetInNet');
 
-    final oopMaxTotal = (data['oopMaxTotal'] ?? 0).toDouble();
-    final oopMet = (data['oopMet'] ?? 0).toDouble();
-    final oopPct = _safeDiv(oopMet, oopMaxTotal).clamp(0.0, 1.0);
+    // Primary calculations for display (individual in-network) - handle nulls
+    final deductibleTotal = individualDeductibleInNet;
+    final deductibleMet = individualDeductibleMetInNet;
+    final deductibleLeft = (deductibleTotal > 0 && deductibleMet >= 0) 
+        ? (deductibleTotal - deductibleMet).clamp(0.0, deductibleTotal) 
+        : 0.0;
+    final deductiblePct = (deductibleTotal > 0) 
+        ? _safeDiv(deductibleMet, deductibleTotal).clamp(0.0, 1.0) 
+        : 0.0;
 
-    final copay = (data['specialistCopay'] ?? 0).toDouble();
-    final coins = (data['coinsurancePercent'] ?? 0).toInt();
+    final oopMaxTotal = individualOOPInNet;
+    final oopMet = individualOOPMetInNet;
+    final oopPct = (oopMaxTotal > 0) 
+        ? _safeDiv(oopMet, oopMaxTotal).clamp(0.0, 1.0) 
+        : 0.0;
+
+    final copay = data['specialistCopay'] != null ? (data['specialistCopay'] as num).toDouble() : 0.0;
+    final coins = data['coinsurancePercent'] != null ? (data['coinsurancePercent'] as num).toInt() : 0;
 
     return _CardContainer(
       child: Column(
@@ -1203,6 +1393,19 @@ class FinancialOverviewCard extends StatelessWidget {
               Text('Max: ${_fmtCurrency(oopMaxTotal)}'),
             ],
           ),
+
+          // Comprehensive deductible and OOP breakdown
+          if (familyDeductibleInNet > 0 || familyOOPInNet > 0) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              'Coverage Details',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            _coverageBreakdown(data),
+          ],
         ],
       ),
     );
@@ -1313,6 +1516,297 @@ class FinancialOverviewCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _coverageBreakdown(Map<String, dynamic> data) {
+    final individualDeductibleInNet = _parseAmount(data['individualDeductibleInNet']?.toString());
+    final individualDeductibleOutNet = _parseAmount(data['individualDeductibleOutNet']?.toString());
+    final familyDeductibleInNet = _parseAmount(data['familyDeductibleInNet']?.toString());
+    final familyDeductibleOutNet = _parseAmount(data['familyDeductibleOutNet']?.toString());
+    
+    final individualOOPInNet = _parseAmount(data['individualOOPInNet']?.toString());
+    final individualOOPOutNet = _parseAmount(data['individualOOPOutNet']?.toString());
+    final familyOOPInNet = _parseAmount(data['familyOOPInNet']?.toString());
+    final familyOOPOutNet = _parseAmount(data['familyOOPOutNet']?.toString());
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Deductible section
+        _coverageSection(
+          'Deductible',
+          Colors.indigo,
+          [
+            _coverageRow('Individual In-Network', _fmtCurrency(individualDeductibleInNet)),
+            _coverageRow('Individual Out-Network', _fmtCurrency(individualDeductibleOutNet)),
+            _coverageRow('Family In-Network', _fmtCurrency(familyDeductibleInNet)),
+            _coverageRow('Family Out-Network', _fmtCurrency(familyDeductibleOutNet)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        // Out-of-Pocket section
+        _coverageSection(
+          'Out-of-Pocket Maximum',
+          Colors.green,
+          [
+            _coverageRow('Individual In-Network', _fmtCurrency(individualOOPInNet)),
+            _coverageRow('Individual Out-Network', _fmtCurrency(individualOOPOutNet)),
+            _coverageRow('Family In-Network', _fmtCurrency(familyOOPInNet)),
+            _coverageRow('Family Out-Network', _fmtCurrency(familyOOPOutNet)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _coverageSection(String title, Color color, List<Widget> rows) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: color,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...rows,
+        ],
+      ),
+    );
+  }
+
+  Widget _coverageRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DebugHBPCCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _DebugHBPCCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'API Field Mapping Analysis',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: Colors.red,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'UI "No Data" Fields Analysis:',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: Colors.orange,
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Section 1: In-Network/Out-Network Service Data
+          _buildFieldMappingSection('In-Network Service Data', [
+            _FieldMapping('UI Display', 'API Field Expected', 'Current Value', 'Notes'),
+            _FieldMapping('Service Type', 'BenefitInformation.InNetworkService', data['inNetwork']?['service']?.toString() ?? 'null', 'Service category'),
+            _FieldMapping('Covered Status', 'BenefitInformation.InNetworkCovered', data['inNetwork']?['serviceCovered']?.toString() ?? 'null', 'YES/NO expected'),
+            _FieldMapping('CoPay Amount', 'BenefitInformation.InNetworkCopay', data['inNetwork']?['coPay']?.toString() ?? 'null', 'Dollar amount'),
+            _FieldMapping('CoInsurance', 'BenefitInformation.InNetworkCoinsurance', data['inNetwork']?['coIns']?.toString() ?? 'null', 'Percentage'),
+            _FieldMapping('Auth Required', 'BenefitInformation.InNetworkAuth', data['inNetwork']?['authRequired']?.toString() ?? 'null', 'YES/NO expected'),
+          ]),
+          
+          const SizedBox(height: 16),
+          
+          // Section 2: Out-Network Service Data
+          _buildFieldMappingSection('Out-Network Service Data', [
+            _FieldMapping('UI Display', 'API Field Expected', 'Current Value', 'Notes'),
+            _FieldMapping('Service Type', 'BenefitInformation.OutNetworkService', data['outNetwork']?['service']?.toString() ?? 'null', 'Service category'),
+            _FieldMapping('Covered Status', 'BenefitInformation.OutNetworkCovered', data['outNetwork']?['serviceCovered']?.toString() ?? 'null', 'YES/NO expected'),
+            _FieldMapping('CoPay Amount', 'BenefitInformation.OutNetworkCopay', data['outNetwork']?['coPay']?.toString() ?? 'null', 'Dollar amount'),
+            _FieldMapping('CoInsurance', 'BenefitInformation.OutNetworkCoinsurance', data['outNetwork']?['coIns']?.toString() ?? 'null', 'Percentage'),
+            _FieldMapping('Auth Required', 'BenefitInformation.OutNetworkAuth', data['outNetwork']?['authRequired']?.toString() ?? 'null', 'YES/NO expected'),
+          ]),
+          
+          const SizedBox(height: 16),
+          
+          // Section 3: Deductible & OOP Data
+          _buildFieldMappingSection('Plan Deductible & OOP Data', [
+            _FieldMapping('UI Display', 'API Field Expected', 'Current Value', 'Notes'),
+            _FieldMapping('Individual Deductible', 'HBPC_Deductible_OOP_Summary.IndividualDeductibleInNet.Value', data['planDeductibleOOP']?['individualDeductibleInNet']?.toString() ?? 'null', 'Dollar amount'),
+            _FieldMapping('Individual OOP Max', 'HBPC_Deductible_OOP_Summary.IndividualOOP_InNet.Value', data['planDeductibleOOP']?['individualOOPInNet']?.toString() ?? 'null', 'Dollar amount'),
+            _FieldMapping('Family Deductible', 'HBPC_Deductible_OOP_Summary.FamilyDeductibleInNet.Value', data['planDeductibleOOP']?['familyDeductibleInNet']?.toString() ?? 'null', 'Dollar amount'),
+            _FieldMapping('Family OOP Max', 'HBPC_Deductible_OOP_Summary.FamilyOOPInNet.Value', data['planDeductibleOOP']?['familyOOPInNet']?.toString() ?? 'null', 'Dollar amount'),
+          ]),
+          
+          const SizedBox(height: 16),
+          
+          // Section 4: Troubleshooting Help
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.yellow.shade50,
+              border: Border.all(color: Colors.orange.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.help_outline, color: Colors.orange.shade700, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Troubleshooting: Why "No Data"?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '1. API may not return BenefitInformation section\n'
+                  '2. Field names may be different in actual API response\n'
+                  '3. Data may be nested differently than expected\n'
+                  '4. Payer may not provide this specific benefit data\n'
+                  '5. Check console logs for actual API field names',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildFieldMappingSection(String title, List<_FieldMapping> mappings) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Column(
+            children: mappings.asMap().entries.map((entry) {
+              final index = entry.key;
+              final mapping = entry.value;
+              final isHeader = index == 0;
+              
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isHeader ? Colors.grey.shade100 : null,
+                  border: index > 0 ? Border(top: BorderSide(color: Colors.grey.shade300)) : null,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        mapping.uiDisplay,
+                        style: TextStyle(
+                          fontWeight: isHeader ? FontWeight.w600 : FontWeight.normal,
+                          fontSize: isHeader ? 12 : 11,
+                          color: isHeader ? Colors.black87 : Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        mapping.apiField,
+                        style: TextStyle(
+                          fontWeight: isHeader ? FontWeight.w600 : FontWeight.normal,
+                          fontSize: isHeader ? 12 : 10,
+                          fontFamily: isHeader ? null : 'monospace',
+                          color: isHeader ? Colors.black87 : Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        mapping.currentValue,
+                        style: TextStyle(
+                          fontWeight: isHeader ? FontWeight.w600 : FontWeight.normal,
+                          fontSize: isHeader ? 12 : 10,
+                          color: isHeader ? Colors.black87 : (mapping.currentValue == 'null' ? Colors.red : Colors.black87),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        mapping.notes,
+                        style: TextStyle(
+                          fontWeight: isHeader ? FontWeight.w600 : FontWeight.normal,
+                          fontSize: isHeader ? 12 : 10,
+                          color: isHeader ? Colors.black87 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FieldMapping {
+  final String uiDisplay;
+  final String apiField;
+  final String currentValue;
+  final String notes;
+  
+  _FieldMapping(this.uiDisplay, this.apiField, this.currentValue, this.notes);
 }
 
 // Small round icon used in card headers
@@ -1388,6 +1882,543 @@ class SectionAccordion extends StatelessWidget {
           ),
           children: [child],
         ),
+      ),
+    );
+  }
+}
+
+class _AllergyImmunotherapyCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _AllergyImmunotherapyCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final service = data["service"]?.toString() ?? 'Allergy Immunotherapy (Allergy Shots)';
+    final serviceCovered = data["serviceCovered"]?.toString() ?? 'Unknown';
+    final coPay = data["coPay"]?.toString() ?? 'Check with provider';
+    final coIns = data["coIns"]?.toString() ?? 'Check with provider';
+    final authRequired = data["authRequired"]?.toString() ?? 'Unknown';
+    final frequency = data["frequency"]?.toString() ?? 'Multiple visits required';
+    final phases = data["phases"] as Map<String, dynamic>? ?? {};
+    
+    final covered = serviceCovered.toUpperCase();
+    final coveredColor = covered == 'YES' ? Colors.green : 
+                        covered == 'UNKNOWN' ? Colors.grey : Colors.redAccent;
+
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Service Title
+          Row(
+            children: [
+              Icon(Icons.vaccines, color: Colors.blue[600], size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  service,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: Color(0xFF0d6efd),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Coverage Status
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: coveredColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: coveredColor.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  covered == 'YES' ? Icons.check_circle : Icons.help_outline,
+                  color: coveredColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Coverage Status: $serviceCovered',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: coveredColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Cost Information
+          const Text(
+            'Cost Information',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _costRow('Copay per Visit', coPay, Icons.attach_money),
+          _costRow('Coinsurance', coIns, Icons.percent),
+          _costRow('Prior Authorization', authRequired, Icons.verified_user),
+          
+          const SizedBox(height: 16),
+
+          // Treatment Information
+          const Text(
+            'Treatment Schedule',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  frequency,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                if (phases.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _phaseRow('Build-up Phase', phases['buildUp']?.toString() ?? '', Icons.trending_up),
+                  const SizedBox(height: 4),
+                  _phaseRow('Maintenance Phase', phases['maintenance']?.toString() ?? '', Icons.refresh),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Important Note
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber[200]!),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, color: Colors.amber[700], size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Allergy immunotherapy is a long-term treatment that requires regular visits. Costs may vary based on allergen testing, serum preparation, and injection frequency. Consult with your allergist for specific treatment plans.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.amber[800],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _costRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey[600]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _phaseRow(String phase, String description, IconData icon) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: Colors.blue[600]),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                phase,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+              if (description.isNotEmpty)
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[700],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Plan Overview Card - Shows plan name, status, and tip
+class _PlanOverviewCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _PlanOverviewCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final planName = data['planName']?.toString() ?? 'Plan name not available';
+    final status = data['status']?.toString() ?? 'Unknown';
+    final selfFunded = data['selfFundedPlan']?.toString() ?? '';
+    
+    final displayPlanName = selfFunded.toUpperCase() == 'YES' 
+        ? '$planName (Self-Insured)' 
+        : planName;
+    
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.verified_user, color: Color(0xFF0d6efd), size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Plan Overview',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Color(0xFF0d6efd)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          Text(
+            'Plan: $displayPlanName',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black87),
+          ),
+          const SizedBox(height: 8),
+          
+          Row(
+            children: [
+              Icon(status.toUpperCase() == 'ACTIVE' ? Icons.check_circle : Icons.info,
+                   color: status.toUpperCase() == 'ACTIVE' ? Colors.green : Colors.orange, size: 18),
+              SizedBox(width: 6),
+              Text(
+                'Status: ${status.toUpperCase() == 'ACTIVE' ? 'Active Coverage' : status}',
+                style: TextStyle(fontWeight: FontWeight.w600, 
+                               color: status.toUpperCase() == 'ACTIVE' ? Colors.green : Colors.orange),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lightbulb_outline, color: Colors.blue[600], size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Tip: Use in-network providers to avoid higher costs.',
+                             style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.w500)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Year-to-Date Progress Card with visual progress bars
+class _YearToDateProgressCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _YearToDateProgressCard({required this.data});
+
+  double _parseAmount(String? value) {
+    if (value == null || value.isEmpty || value == '—') return 0.0;
+    final cleaned = value.replaceAll(RegExp(r'[^\d.]'), '');
+    return double.tryParse(cleaned) ?? 0.0;
+  }
+
+  String _fmtCurrency(double? v) => v == null || v == 0 ? '\$0' : '\$${v.toStringAsFixed(0)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final individualDedTotal = _parseAmount(data['individualDeductibleInNet']?.toString());
+    final individualDedMet = _parseAmount(data['individualDeductibleMetInNet']?.toString());
+    final familyDedTotal = _parseAmount(data['familyDeductibleInNet']?.toString());
+    final familyDedRemaining = familyDedTotal > 0 ? (familyDedTotal - individualDedMet).clamp(0.0, familyDedTotal) : 0.0;
+    
+    final individualOOPTotal = _parseAmount(data['individualOOPInNet']?.toString());
+    final individualOOPMet = _parseAmount(data['individualOOPMetInNet']?.toString());
+    final individualOOPRemaining = individualOOPTotal > 0 ? (individualOOPTotal - individualOOPMet).clamp(0.0, individualOOPTotal) : 0.0;
+    final familyOOPTotal = _parseAmount(data['familyOOPInNet']?.toString());
+    final familyOOPRemaining = familyOOPTotal > 0 ? (familyOOPTotal - individualOOPMet).clamp(0.0, familyOOPTotal) : 0.0;
+
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.trending_up, color: Color(0xFF0d6efd), size: 20),
+              SizedBox(width: 8),
+              Text('Your Year-to-Date Progress',
+                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Color(0xFF0d6efd))),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          _buildProgressSection(
+            'Deductible (In-Network)',
+            'Individual ${_fmtCurrency(individualDedTotal)} (Met)',
+            'Family ${_fmtCurrency(familyDedTotal)} (Remaining ${_fmtCurrency(familyDedRemaining)})',
+            individualDedTotal > 0 ? (individualDedMet / individualDedTotal).clamp(0.0, 1.0) : 0.0,
+            Colors.green,
+          ),
+          
+          const SizedBox(height: 16),
+          
+          _buildProgressSection(
+            'Out-of-Pocket Max (In-Network)',
+            'Individual ${_fmtCurrency(individualOOPTotal)} (Remaining ${_fmtCurrency(individualOOPRemaining)})',
+            'Family ${_fmtCurrency(familyOOPTotal)} (Remaining ${_fmtCurrency(familyOOPRemaining)})',
+            individualOOPTotal > 0 ? (individualOOPMet / individualOOPTotal).clamp(0.0, 1.0) : 0.0,
+            Colors.blue,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressSection(String title, String individual, String family, double progress, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87)),
+        const SizedBox(height: 8),
+        Text(individual, style: TextStyle(color: Colors.grey[700])),
+        Text(family, style: TextStyle(color: Colors.grey[700])),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.grey[200],
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 8,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Common Services Card - Shows costs for allergy services
+class _CommonServicesCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _CommonServicesCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final dmeData = data['inNetwork'] ?? {};
+    final allergyData = data['allergyImmunotherapy'] ?? {};
+    
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.medical_services, color: Color(0xFF0d6efd), size: 20),
+              SizedBox(width: 8),
+              Text('What You Pay for Common Services',
+                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Color(0xFF0d6efd))),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          _buildServiceRow(
+            'Allergy supplies/equipment (DME)',
+            dmeData['coPay']?.toString() ?? 'Not available',
+            dmeData['coIns']?.toString() ?? 'Not available',
+            '100% Out-of-Network',
+          ),
+          
+          const SizedBox(height: 12),
+          
+          _buildServiceRow(
+            'Allergy testing & injections',
+            allergyData['coPay'] != null ? allergyData['coPay'].toString() : null,
+            allergyData['coIns'] != null ? allergyData['coIns'].toString() : null,
+            null,
+            customMessage: allergyData['coPay'] == null && allergyData['coIns'] == null 
+                ? 'Details not returned by your plan in this check; clinic will confirm.'
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceRow(String service, String? copay, String? coinsurance, String? outNetwork, {String? customMessage}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(service, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black87)),
+        const SizedBox(height: 4),
+        if (customMessage != null)
+          Text(customMessage, style: TextStyle(color: Colors.orange[700], fontStyle: FontStyle.italic))
+        else ...[
+          Row(
+            children: [
+              if (copay != null) ...[
+                Text('Copay ${copay.startsWith('\$') ? copay : '\$$copay'}', 
+                     style: TextStyle(color: Colors.grey[700])),
+                if (coinsurance != null) Text(', ', style: TextStyle(color: Colors.grey[700])),
+              ],
+              if (coinsurance != null)
+                Text('Coinsurance $coinsurance In-Network', style: TextStyle(color: Colors.grey[700])),
+            ],
+          ),
+          if (outNetwork != null)
+            Text(outNetwork, style: TextStyle(color: Colors.grey[700])),
+        ],
+      ],
+    );
+  }
+}
+
+/// Primary Care Provider Card (placeholder)
+class _PrimaryCareProviderCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.local_hospital, color: Color(0xFF0d6efd), size: 20),
+              SizedBox(width: 8),
+              Text('Your Primary Care Provider on File',
+                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Color(0xFF0d6efd))),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Joel Goode, NPI 1649247198 — tap to call / map address',
+            style: TextStyle(color: Colors.blue[600], decoration: TextDecoration.underline),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Prior Authorization Notes Card
+class _PriorAuthorizationCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return _CardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.assignment, color: Color(0xFF0d6efd), size: 20),
+              SizedBox(width: 8),
+              Text('Notes about Prior Authorization',
+                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Color(0xFF0d6efd))),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber[200]!),
+            ),
+            child: Text(
+              'Some services may require prior authorization. If needed, our clinic will request it for you.',
+              style: TextStyle(color: Colors.amber[800], fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Disclaimer Footer
+class _DisclaimerFooter extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.grey[600], size: 18),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'This summary comes directly from your insurer\'s real-time response and may change. Final patient responsibility is determined after the claim is processed.',
+              style: TextStyle(color: Colors.grey[700], fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ),
+        ],
       ),
     );
   }
