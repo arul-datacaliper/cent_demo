@@ -512,28 +512,30 @@ class _NewInsuranceCheckScreenState extends State<NewInsuranceCheckScreen> {
                     validator: _required,
                   ),
                   const SizedBox(height: 16),
-                  SizedBox(
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _fetchEligibility,
-                      icon: _isLoading 
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Icon(Icons.search),
-                      label: Text(_isLoading ? 'Checking...' : 'Check Eligibility'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0d6efd),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _fetchEligibility,
+                    icon: _isLoading 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.search, size: 16),
+                    label: Text(
+                      _isLoading ? 'Checking...' : 'Check Eligibility',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0d6efd),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      elevation: 2,
                     ),
                   ),
                 ],
