@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:dropdown_search/dropdown_search.dart';
 import '../services/pverify_service.dart';
+import '../models/immunotherapy_options.dart';
+import '../widgets/immunotherapy_options_widget.dart';
 
 // Payer model class
 class Payer {
@@ -37,12 +39,16 @@ class _ChatMessage {
   List<Map<String, dynamic>>? citations;
   List<String>? followUps;
   bool streaming;
+  Widget? customWidget; // Add support for custom widgets
+  Map<String, double>? costBreakdown; // For treatment cost analysis
   _ChatMessage({
     required this.text,
     required this.isBot,
     this.citations,
     this.followUps,
     this.streaming = false,
+    this.customWidget,
+    this.costBreakdown,
   });
 }
 
@@ -74,6 +80,9 @@ class _ChatScreenState extends State<ChatScreen> {
   DateTime? _dob;
   Payer? _selectedPayer;
   bool _isLoadingInsurance = false;
+
+  // Store insurance data after eligibility check
+  Map<String, dynamic>? _insuranceData;
 
   StreamSubscription<String>? _streamSub;
   final _client = http.Client();
@@ -132,7 +141,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages.add(_ChatMessage(
           text: "Here are some quick action you can take:",
           isBot: true,
-          followUps: ["Check Insurance Coverage", "Calculate Treatment Cost"],
+          followUps: ["Check Insurance Coverage", "Calculate Treatment Cost", "Financial Assessment"],
         ));
       } else {
         _messages.add(_ChatMessage(
@@ -163,10 +172,56 @@ class _ChatScreenState extends State<ChatScreen> {
     } else if (action == "Calculate Treatment Cost") {
       setState(() {
         _messages.add(_ChatMessage(
-          text: "I'd be happy to help you calculate your treatment costs! To provide an accurate estimate, I'll need some information about your insurance plan and treatment type.",
+          text: "Here's a comprehensive overview of your immunotherapy treatment options:",
+          isBot: true,
+        ));
+        _messages.add(_ChatMessage(
+          text: "",
+          isBot: true,
+          customWidget: ImmunotherapyOptionsWidget(
+            onCheckInsurance: () => _handleFollowUpAction("Check Insurance Coverage"),
+          ),
+        ));
+      });
+    } else if (action == "Financial Assessment") {
+      setState(() {
+        _messages.add(_ChatMessage(
+          text: "I'll provide you with a comprehensive financial assessment for your allergy immunotherapy treatment. This will include cost breakdown, payment options, potential savings, and financial planning recommendations.",
           isBot: true,
         ));
       });
+    } else if (action == "Analyze Treatment Cost Coverage") {
+      setState(() {
+        _messages.add(_ChatMessage(
+          text: "Let me analyze how your insurance coverage applies to different treatment costs. Please select a treatment option to analyze:",
+          isBot: true,
+          followUps: [
+            "Allergy Shots - \$2,500 total cost",
+            "Allergy Drops - \$1,800 total cost", 
+            "Custom treatment cost"
+          ],
+        ));
+      });
+    } else if (action.startsWith("Allergy Shots - ") || action.startsWith("Allergy Drops - ")) {
+      // Extract treatment cost and analyze
+      final costString = action.split(" - ")[1].replaceAll("\$", "").replaceAll(" total cost", "").replaceAll(",", "");
+      final treatmentCost = double.tryParse(costString) ?? 2500.0;
+      
+      // Extract remaining deductible and out-of-pocket from stored insurance data
+      final financials = _insuranceData?['financials'] ?? {};
+      final remainingDeductible = double.tryParse(
+        financials['individualDeductibleRemainingInNet']?.toString().replaceAll(RegExp(r'[^\d.]'), '') ?? '0'
+      ) ?? 250.0; // Default if not available
+      
+      final remainingOutOfPocket = double.tryParse(
+        financials['individualOOPRemainingInNet']?.toString().replaceAll(RegExp(r'[^\d.]'), '') ?? '0'
+      ) ?? 500.0; // Default if not available
+      
+      _analyzeInsuranceCost(
+        treatmentCost: treatmentCost,
+        remainingDeductible: remainingDeductible,
+        remainingOutOfPocket: remainingOutOfPocket,
+      );
     } else {
       // For other actions, use the regular streaming response
       _startStreamingAnswer(action);
@@ -353,6 +408,9 @@ class _ChatScreenState extends State<ChatScreen> {
         _showInsuranceForm = false;
         _showInput = true;
         
+        // Store insurance data for later use
+        _insuranceData = processedData;
+        
         // Add success message with insurance details
         final planCoverage = processedData['planCoverage'] ?? {};
         final financials = processedData['financials'] ?? {};
@@ -378,6 +436,11 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages.add(_ChatMessage(
           text: statusMessage,
           isBot: true,
+          followUps: [
+            "Analyze Treatment Cost Coverage",
+            "What treatments are covered?",
+            "How to maximize my benefits?"
+          ],
         ));
       });
       
@@ -418,6 +481,489 @@ class _ChatScreenState extends State<ChatScreen> {
         "financials": {},
       };
     }
+  }
+
+  Future<void> _analyzeInsuranceCost({
+    required double treatmentCost,
+    required double remainingDeductible,
+    required double remainingOutOfPocket,
+  }) async {
+    setState(() {
+      _messages.add(_ChatMessage(
+        text: "Analyzing your insurance coverage for this treatment cost...",
+        isBot: true,
+        streaming: true,
+      ));
+    });
+    _autoScroll();
+
+    try {
+      final req = http.Request('POST', Uri.parse('$_baseUrl/chat/insurance-analysis'))
+        ..headers['Content-Type'] = 'application/json'
+        ..body = jsonEncode({
+          "treatmentCost": treatmentCost,
+          "remainingDeductible": remainingDeductible,
+          "remainingOutOfPocket": remainingOutOfPocket,
+          "stream": true,
+        });
+
+      final streamed = await _client.send(req);
+      final int botIndex = _messages.length - 1;
+
+      await _streamSub?.cancel();
+
+      String fullResponse = "";
+
+      _streamSub = streamed.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+        if (!line.startsWith('data:')) return;
+        final data = line.substring(5).trim();
+        if (data.isEmpty || data == '[DONE]') return;
+
+        Map<String, dynamic> payload;
+        try {
+          payload = jsonDecode(data) as Map<String, dynamic>;
+        } catch (_) {
+          return;
+        }
+
+        final type = payload['type'];
+        if (type == 'token') {
+          final token = (payload['text'] ?? '') as String;
+          if (token.isEmpty) return;
+          fullResponse += token;
+          setState(() {
+            if (_messages[botIndex].text == "Analyzing your insurance coverage for this treatment cost...") {
+              _messages[botIndex].text = token;
+            } else {
+              _messages[botIndex].text += token;
+            }
+          });
+          _autoScroll();
+        } else if (type == 'final') {
+          // Extract cost breakdown from the response
+          final costBreakdown = _extractCostBreakdownFromResponse(fullResponse, treatmentCost, remainingDeductible, remainingOutOfPocket);
+          
+          setState(() {
+            _messages[botIndex].streaming = false;
+            _messages[botIndex].costBreakdown = costBreakdown;
+            _messages[botIndex].followUps =
+                (payload['followUps'] as List?)?.cast<String>();
+            // Replace text message with custom widget
+            _messages[botIndex].customWidget = _buildTreatmentAnalysisWidget(
+              fullResponse,
+              costBreakdown,
+              remainingDeductible,
+              remainingOutOfPocket,
+            );
+            _messages[botIndex].text = ""; // Clear text since we're using widget
+          });
+          _autoScroll();
+        }
+      }, onError: (_) {
+        if (!mounted) return;
+        setState(() {
+          _messages[botIndex].streaming = false;
+          if (_messages[botIndex].text.contains("Analyzing your insurance coverage")) {
+            _messages[botIndex].text = 'Unable to analyze insurance coverage at the moment. Please try again.';
+          }
+        });
+      }, onDone: () {
+        if (!mounted) return;
+        setState(() {
+          _messages[botIndex].streaming = false;
+        });
+      });
+
+    } catch (e) {
+      setState(() {
+        _messages.removeLast(); // Remove loading message
+        _messages.add(_ChatMessage(
+          text: "Sorry, I couldn't analyze your insurance coverage at the moment. Please try again later.",
+          isBot: true,
+        ));
+      });
+    }
+  }
+
+  Map<String, double> _extractCostBreakdownFromResponse(String response, double treatmentCost, double remainingDeductible, double remainingOutOfPocket) {
+    // Calculate cost breakdown using the same logic as new_insurance_check_screen.dart
+    final patientPaysDeductible = treatmentCost <= remainingDeductible ? treatmentCost : remainingDeductible;
+    final remainingAfterDeductible = treatmentCost - patientPaysDeductible;
+    final patientPaysOOP = remainingAfterDeductible <= remainingOutOfPocket ? remainingAfterDeductible : remainingOutOfPocket;
+    final insuranceCovers = treatmentCost - patientPaysDeductible - patientPaysOOP;
+
+    return {
+      'Patient Pays (Deductible)': patientPaysDeductible,
+      'Patient Pays (Out-of-Pocket)': patientPaysOOP,
+      'Insurance Covers': insuranceCovers,
+    };
+  }
+
+  Widget _buildTreatmentAnalysisWidget(String analysisText, Map<String, double> costBreakdown, double remainingDeductible, double remainingOutOfPocket) {
+    return Container(
+      constraints: BoxConstraints(maxWidth: 500),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Card
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green[200]!, width: 1.5),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.check_circle, color: Colors.green[600], size: 24),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Analysis Complete',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Here\'s your personalized cost breakdown',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Insurance Status Card
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue[100]!, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.account_balance_wallet, color: Colors.blue[700], size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Your Current Insurance Status',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                
+                _buildInsuranceStatusRow(
+                  'Remaining Deductible',
+                  '\$${remainingDeductible.toStringAsFixed(0)}',
+                  Colors.orange,
+                  Icons.trending_down,
+                ),
+                const SizedBox(height: 8),
+                
+                _buildInsuranceStatusRow(
+                  'Remaining Out-of-Pocket',
+                  '\$${remainingOutOfPocket.toStringAsFixed(0)}',
+                  Colors.purple,
+                  Icons.payments_outlined,
+                ),
+              ],
+            ),
+          ),
+          
+          // Cost Breakdown Visual Card
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[200]!, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.pie_chart, color: Colors.blue[700], size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Treatment Cost Split',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildCostBreakdownChart(costBreakdown),
+              ],
+            ),
+          ),
+          
+          // Summary Insight Card
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.green[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green[200]!),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.insights, color: Colors.green[700], size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bottom Line',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.green[900],
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        _buildSimplifiedSummary(costBreakdown),
+                        style: TextStyle(
+                          color: Colors.green[900],
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCostBreakdownChart(Map<String, double> costBreakdown) {
+    final total = costBreakdown.values.reduce((a, b) => a + b);
+    if (total == 0) return SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cost Breakdown',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          if ((costBreakdown['Patient Pays (Deductible)'] ?? 0) > 0)
+            _buildCostBar(
+              'Patient Pays (Deductible)', 
+              costBreakdown['Patient Pays (Deductible)']!, 
+              total, 
+              Colors.red[400]!
+            ),
+          
+          if ((costBreakdown['Patient Pays (Out-of-Pocket)'] ?? 0) > 0)
+            _buildCostBar(
+              'Patient Pays (Out-of-Pocket)', 
+              costBreakdown['Patient Pays (Out-of-Pocket)']!, 
+              total, 
+              Colors.orange[400]!
+            ),
+          
+          if ((costBreakdown['Insurance Covers'] ?? 0) > 0)
+            _buildCostBar(
+              'Insurance Covers', 
+              costBreakdown['Insurance Covers']!, 
+              total, 
+              Colors.green[400]!
+            ),
+          
+          const SizedBox(height: 8),
+          Divider(color: Colors.grey[300]),
+          const SizedBox(height: 8),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total Treatment Cost',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+              Text(
+                '\$${total.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCostBar(String label, double amount, double total, Color color) {
+    final percentage = (amount / total * 100);
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+              Text(
+                '\$${amount.toStringAsFixed(0)} (${percentage.toStringAsFixed(0)}%)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: percentage / 100,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _buildSimplifiedSummary(Map<String, double> costBreakdown) {
+    final patientDeductible = costBreakdown['Patient Pays (Deductible)'] ?? 0;
+    final patientOOP = costBreakdown['Patient Pays (Out-of-Pocket)'] ?? 0;
+    final insuranceCovers = costBreakdown['Insurance Covers'] ?? 0;
+    final totalPatientPays = patientDeductible + patientOOP;
+    
+    if (totalPatientPays == 0) {
+      return 'Great news! Your insurance covers the full treatment cost.';
+    } else if (insuranceCovers == 0) {
+      return 'You will pay the full treatment cost of \$${totalPatientPays.toStringAsFixed(0)} towards your deductible.';
+    } else {
+      return 'You will pay \$${totalPatientPays.toStringAsFixed(0)} and your insurance covers \$${insuranceCovers.toStringAsFixed(0)}.';
+    }
+  }
+
+  Widget _buildInsuranceStatusRow(String label, String amount, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
+            ),
+          ),
+          Text(
+            amount,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -619,12 +1165,18 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
             Flexible(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: msg.customWidget != null 
+                  ? EdgeInsets.zero 
+                  : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: msg.isBot ? Colors.grey[100] : Colors.blue[50],
-                  borderRadius: BorderRadius.circular(12),
+                  color: msg.customWidget != null 
+                    ? Colors.transparent 
+                    : (msg.isBot ? Colors.grey[100] : Colors.blue[50]),
+                  borderRadius: msg.customWidget != null 
+                    ? null 
+                    : BorderRadius.circular(12),
                 ),
-                child: Column(
+                child: msg.customWidget ?? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (msg.isBot)
@@ -635,10 +1187,11 @@ class _ChatScreenState extends State<ChatScreen> {
                           fontSize: 11,
                         ),
                       ),
-                    Text(
-                      msg.text,
-                      style: const TextStyle(fontSize: 14),
-                    ),
+                    if (msg.text.isNotEmpty)
+                      Text(
+                        msg.text,
+                        style: const TextStyle(fontSize: 14),
+                      ),
                     if (msg.streaming) ...[
                       const SizedBox(height: 8),
                       const _TypingDots(),
@@ -668,7 +1221,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                   child: OutlinedButton.icon(
                                     onPressed: () => _handleFollowUpAction(q),
                                     icon: Icon(
-                                      q.contains("Insurance") ? Icons.security : Icons.calculate,
+                                      q.contains("Insurance") 
+                                        ? Icons.security 
+                                        : q.contains("Financial Assessment")
+                                          ? Icons.attach_money
+                                          : Icons.calculate,
                                       size: 18,
                                     ),
                                     label: Text(q),
