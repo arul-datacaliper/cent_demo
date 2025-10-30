@@ -7,13 +7,12 @@ class PVerifyService {
   static const String _tokenUrl = '$_baseUrl/Token';
   static const String _eligibilityUrl = '$_baseUrl/api/EligibilitySummary';
   
-  // OAuth2 credentials (in production, these should be stored securely)
+  
   static const String _clientId = '4f1efc7e-8102-4815-b6cc-09b890acb91e';
   static const String _clientSecret = '0zxranEQiQZRWwq2iACkgvdy7Z60YQ';
   
-  // Production API requires username (typically email or user ID)
-  // This should be provided during token generation for production
-  static const String _username = 'AGurunathan'; // UPDATE THIS with your pVerify username/email
+  
+  static const String _username = ''; // UPDATE THIS with your pVerify username/email
   
   // Token storage keys
   static const String _tokenKey = 'pverify_access_token';
