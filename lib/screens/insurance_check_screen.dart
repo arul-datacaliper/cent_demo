@@ -67,6 +67,7 @@ class _EligibilityScreenState extends State<EligibilityScreen> {
     Payer(code: '00738', name: 'Advantage Health Solutions', type: 'EDI', eligibility: true, claimStatus: false),
     Payer(code: '00292', name: 'ADVANTRA (TEXAS, NEW MEXICO, ARIZONA ONLY)', type: 'EDI', eligibility: true, claimStatus: false),
     Payer(code: 'BO00123', name: 'Advantica BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00192', name: 'United Healthcare', type: 'EDI', eligibility: true, claimStatus: true),
     
     // Non-eligible payers (sorted alphabetically)
     Payer(code: 'DE001', name: 'AARP Dental', type: 'EDI', eligibility: false, claimStatus: false),

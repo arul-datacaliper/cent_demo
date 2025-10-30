@@ -109,6 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
     Payer(code: '00738', name: 'Advantage Health Solutions', type: 'EDI', eligibility: true, claimStatus: false),
     Payer(code: '00292', name: 'ADVANTRA (TEXAS, NEW MEXICO, ARIZONA ONLY)', type: 'EDI', eligibility: true, claimStatus: false),
     Payer(code: 'BO00123', name: 'Advantica BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00192', name: 'United Healthcare', type: 'EDI', eligibility: true, claimStatus: true),
     
     // Non-eligible payers (sorted alphabetically)
     Payer(code: 'DE001', name: 'AARP Dental', type: 'EDI', eligibility: false, claimStatus: false),
@@ -388,16 +389,65 @@ class _ChatScreenState extends State<ChatScreen> {
         throw Exception('Failed to get pVerify access token');
       }
       
+      print('🔍 Checking eligibility with pVerify...');
+      print('📋 Form Data:');
+      print('  - Selected Payer: ${_selectedPayer?.name ?? "N/A"}');
+      print('  - Payer Code: ${_selectedPayer?.code ?? "N/A"}');
+      print('  - Member ID: ${_memberIdController.text.trim()}');
+      print('  - DOB: ${_dobController.text.trim()}');
+      
       final eligibilityData = await pverifyService.getEligibilitySummary(
+        payerCode: _selectedPayer?.code,
         payerName: _selectedPayer?.name ?? _payerController.text.trim(),
         memberID: _memberIdController.text.trim(),
-        firstName: 'Test',
-        lastName: 'Test1',
         dob: _dobController.text.trim(),
       );
       
       if (eligibilityData == null) {
         throw Exception('Failed to get eligibility data from pVerify');
+      }
+
+      // Check for error messages in the response
+      final errorMessage = eligibilityData['APIResponseMessage'] as String?;
+      final ediErrorMessage = eligibilityData['EDIErrorMessage'] as String?;
+      
+      if (errorMessage != null && errorMessage.contains('Error')) {
+        print('❌ API Error Response:');
+        print('  - Message: $errorMessage');
+        print('  - EDI Message: $ediErrorMessage');
+        print('  - Follow-up Action: ${eligibilityData['FollowUpAction']}');
+        print('  - Possible Resolution: ${eligibilityData['PossibleResolution']}');
+        
+        setState(() {
+          _isLoadingInsurance = false;
+          _messages.removeLast(); // Remove loading message
+          
+          // Create user-friendly error message
+          String userError = "❌ Unable to verify insurance coverage\n\n";
+          
+          if (errorMessage.contains('Invalid/Missing Subscriber/Insured ID')) {
+            userError += "⚠️ Member ID Issue:\n";
+            userError += "The Member ID you entered doesn't match the insurance payer's records.\n\n";
+            userError += "📋 Please check:\n";
+            userError += "• Member ID format (including any letters/prefixes)\n";
+            userError += "• Correct insurance payer selected\n";
+            userError += "• Member ID matches your insurance card exactly\n\n";
+            userError += "💡 Tip: Member IDs are case-sensitive and may include letters.";
+          } else {
+            userError += "Error: $errorMessage\n\n";
+            userError += "Follow-up Action: ${eligibilityData['FollowUpAction'] ?? 'Please verify your information'}\n";
+          }
+          
+          _messages.add(_ChatMessage(
+            text: userError,
+            isBot: true,
+            followUps: [
+              "Try again with different Member ID",
+              "Contact support"
+            ],
+          ));
+        });
+        return;
       }
 
       final processedData = _processEligibilityResponse(eligibilityData);
@@ -421,14 +471,14 @@ class _ChatScreenState extends State<ChatScreen> {
         
         if (financials['individualDeductibleInNet'] != null) {
           statusMessage += "💰 Deductible (In-Network):\n";
-          statusMessage += "Individual: \$${financials['individualDeductibleInNet']}\n";
-          statusMessage += "Remaining: \$${financials['individualDeductibleRemainingInNet'] ?? '0'}\n\n";
+          statusMessage += "Individual: ${financials['individualDeductibleInNet']}\n";
+          statusMessage += "Remaining: ${financials['individualDeductibleRemainingInNet'] ?? '0'}\n\n";
         }
         
         if (financials['individualOOPInNet'] != null) {
           statusMessage += "🎯 Out-of-Pocket Maximum:\n";
-          statusMessage += "Individual: \$${financials['individualOOPInNet']}\n";
-          statusMessage += "Remaining: \$${financials['individualOOPRemainingInNet'] ?? '0'}\n\n";
+          statusMessage += "Individual: ${financials['individualOOPInNet']}\n";
+          statusMessage += "Remaining: ${financials['individualOOPRemainingInNet'] ?? '0'}\n\n";
         }
         
         statusMessage += "Is there anything specific about your coverage you'd like to know more about?";
@@ -445,11 +495,12 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       
     } catch (e) {
+      print('❌ Exception during eligibility check: $e');
       setState(() {
         _isLoadingInsurance = false;
         _messages.removeLast(); // Remove loading message
         _messages.add(_ChatMessage(
-          text: "Sorry, I couldn't retrieve your insurance information at the moment. Please try again later or contact your insurance provider directly.",
+          text: "Sorry, I couldn't retrieve your insurance information at the moment. Error: ${e.toString()}",
           isBot: true,
         ));
       });

@@ -3,17 +3,22 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PVerifyService {
-  static const String _baseUrl = 'https://api.pverify.com/test';
+  static const String _baseUrl = 'https://api.pverify.com/';
   static const String _tokenUrl = '$_baseUrl/Token';
   static const String _eligibilityUrl = '$_baseUrl/api/EligibilitySummary';
   
   // OAuth2 credentials (in production, these should be stored securely)
-  static const String _clientId = 'c4cc14d3-e602-4755-91c0-4dcd611752d9';
-  static const String _clientSecret = 'lvePnzOp9q8zs3xTeJ52tGwt77IDw';
+  static const String _clientId = '4f1efc7e-8102-4815-b6cc-09b890acb91e';
+  static const String _clientSecret = '0zxranEQiQZRWwq2iACkgvdy7Z60YQ';
+  
+  // Production API requires username (typically email or user ID)
+  // This should be provided during token generation for production
+  static const String _username = 'AGurunathan'; // UPDATE THIS with your pVerify username/email
   
   // Token storage keys
   static const String _tokenKey = 'pverify_access_token';
   static const String _expiryKey = 'pverify_token_expiry';
+  static const String _clientIdKey = 'pverify_client_id'; // Track which client ID generated the token
   
   // In-memory cache
   static String? _accessToken;
@@ -25,10 +30,22 @@ class PVerifyService {
   PVerifyService._internal();
   
   /// Get a valid access token (generates new one if expired or doesn't exist)
-  Future<String?> getAccessToken() async {
+  Future<String?> getAccessToken({bool forceRefresh = false}) async {
+    // If force refresh requested, clear existing token
+    if (forceRefresh) {
+      print('🔄 Force refresh requested - clearing cached token');
+      await clearToken();
+    }
+    
     // Load from persistent storage if not in memory
     if (_accessToken == null) {
       await _loadTokenFromStorage();
+    }
+    
+    // Check if client ID has changed (environment switch)
+    if (_accessToken != null && !await _isTokenForCurrentClient()) {
+      print('⚠️ Client ID changed - clearing old token');
+      await clearToken();
     }
     
     if (_isTokenValid()) {
@@ -36,6 +53,17 @@ class PVerifyService {
     }
     
     return await _generateToken();
+  }
+  
+  /// Check if stored token was generated for current client ID
+  Future<bool> _isTokenForCurrentClient() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedClientId = prefs.getString(_clientIdKey);
+      return storedClientId == _clientId;
+    } catch (e) {
+      return false;
+    }
   }
   
   /// Load token from persistent storage
@@ -68,6 +96,7 @@ class PVerifyService {
       if (_accessToken != null && _tokenExpiry != null) {
         await prefs.setString(_tokenKey, _accessToken!);
         await prefs.setInt(_expiryKey, _tokenExpiry!.millisecondsSinceEpoch);
+        await prefs.setString(_clientIdKey, _clientId); // Store which client ID generated this token
         print('💾 Saved pVerify token to storage');
       }
     } catch (e) {
@@ -139,10 +168,17 @@ class PVerifyService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_tokenKey);
       await prefs.remove(_expiryKey);
+      await prefs.remove(_clientIdKey);
       print('🗑️ Cleared pVerify token from storage');
     } catch (e) {
       print('⚠️ Error clearing token from storage: $e');
     }
+  }
+  
+  /// Force refresh the access token (clears cache and generates new token)
+  Future<String?> refreshToken() async {
+    print('🔄 Refreshing pVerify access token...');
+    return await getAccessToken(forceRefresh: true);
   }
   
   /// Get token info for debugging
@@ -189,6 +225,9 @@ class PVerifyService {
     String? firstName,
     String? lastName,
     String? dob,
+    String? providerNPI,
+    String? providerLastName,
+    bool isRetry = false,
   }) async {
     try {
       // Get valid access token
@@ -197,41 +236,56 @@ class PVerifyService {
         throw Exception('Unable to get access token');
       }
 
-      // Use provided values or hardcoded defaults for testing
+      // Use current date for DOS (Date of Service)
+      final now = DateTime.now();
+      final dosDate = "${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year}";
+
+      // Build request body with actual provided values
       final requestBody = {
         "payerCode": payerCode ?? "00192",
         "payerName": payerName ?? "UHC",
         "provider": {
           "firstName": "",
           "middleName": "",
-          "lastName": " test name",
-          "npi": "1234567890"
+          "lastName": providerLastName ?? "Provider",
+          "npi": providerNPI ?? "1467560003" // Valid NPI format
         },
         "subscriber": {
-          "firstName": firstName ?? "Test",
-          "dob": dob ?? "01/01/1950",
-          "lastName": lastName ?? "Test1",
+          "firstName": firstName ?? "",  // Empty string if not provided
+          "dob": dob ?? "01/01/1980",
+          "lastName": lastName ?? "",    // Empty string if not provided
           "memberID": memberID ?? "1234567890"
         },
         "dependent": null,
         "isSubscriberPatient": "True",
-        "doS_StartDate": "04/21/2020",
-        "doS_EndDate": "04/21/2020",
+        "doS_StartDate": dosDate,
+        "doS_EndDate": dosDate,
         "PracticeTypeCode": "3",
         "referenceId": "Pat MRN",
-        "Location": "Any location Name",
+        "Location": "Test Location",
         "IncludeTextResponse": "false",
-        "RequestSource": "TestAPI"
+        "RequestSource": "API"
       };
 
       print('🔍 Making eligibility request to pVerify...');
-      print('Request payload: ${json.encode(requestBody)}');
+      print('📋 Request Details:');
+      print('  - Payer Code: ${payerCode ?? "00192"}');
+      print('  - Payer Name: ${payerName ?? "UHC"}');
+      print('  - Member ID: ${memberID ?? "1234567890"}');
+      print('  - First Name: ${firstName ?? "(empty)"}');
+      print('  - Last Name: ${lastName ?? "(empty)"}');
+      print('  - DOB: ${dob ?? "01/01/1980"}');
+      print('  - DOS Date: $dosDate');
+      print('  - Provider NPI: ${providerNPI ?? "1467560003"}');
+      print('📦 Full Request Body:');
+      print(json.encode(requestBody));
 
       final response = await http.post(
         Uri.parse(_eligibilityUrl),
         headers: {
           'Authorization': 'Bearer $token',
-          'Client-API-Id': _clientId, // Using client ID as Client-API-Id
+          'Client-API-Id': _clientId,
+          'Username': _username, // Production requires username header
           'Content-Type': 'application/json',
         },
         body: json.encode(requestBody),
@@ -253,6 +307,21 @@ class PVerifyService {
         final data = json.decode(response.body);
         print('✅ Eligibility request successful');
         return data;
+      } else if (response.statusCode == 401 && !isRetry) {
+        // Token is invalid - refresh and retry once
+        print('⚠️ Got 401 error - token may be invalid. Refreshing token and retrying...');
+        await refreshToken();
+        
+        // Retry the request with fresh token
+        return await getEligibilitySummary(
+          payerCode: payerCode,
+          payerName: payerName,
+          memberID: memberID,
+          firstName: firstName,
+          lastName: lastName,
+          dob: dob,
+          isRetry: true, // Prevent infinite retry loop
+        );
       } else {
         print('❌ Eligibility request failed');
         print('Status: ${response.statusCode}');

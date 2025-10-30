@@ -79,6 +79,7 @@ class _NewInsuranceCheckScreenState extends State<NewInsuranceCheckScreen> {
     Payer(code: '00738', name: 'Advantage Health Solutions', type: 'EDI', eligibility: true, claimStatus: false),
     Payer(code: '00292', name: 'ADVANTRA (TEXAS, NEW MEXICO, ARIZONA ONLY)', type: 'EDI', eligibility: true, claimStatus: false),
     Payer(code: 'BO00123', name: 'Advantica BO', type: 'Non-EDI', eligibility: true, claimStatus: false),
+    Payer(code: '00192', name: 'United Healthcare', type: 'EDI', eligibility: true, claimStatus: true),
     
     // Non-eligible payers (sorted alphabetically)
     Payer(code: 'DE001', name: 'AARP Dental', type: 'EDI', eligibility: false, claimStatus: false),
@@ -145,13 +146,18 @@ class _NewInsuranceCheckScreenState extends State<NewInsuranceCheckScreen> {
       }
       
       print('✅ Got pVerify token: ${token.substring(0, 20)}...');
+      print('🔍 Checking eligibility with pVerify...');
+      print('📋 Form Data:');
+      print('  - Selected Payer: ${_selectedPayer?.name ?? "N/A"}');
+      print('  - Payer Code: ${_selectedPayer?.code ?? "N/A"}');
+      print('  - Member ID: ${_memberIdController.text.trim()}');
+      print('  - DOB: ${_dobController.text.trim()}');
       
       // Step 2: Make eligibility request with user data
       final eligibilityData = await pverifyService.getEligibilitySummary(
+        payerCode: _selectedPayer?.code,
         payerName: _selectedPayer?.name ?? _payerController.text.trim(),
         memberID: _memberIdController.text.trim(),
-        firstName: 'Test', // TODO: Add first name field
-        lastName: 'Test1', // TODO: Add last name field  
         dob: _dobController.text.trim(),
       );
       
@@ -161,6 +167,36 @@ class _NewInsuranceCheckScreenState extends State<NewInsuranceCheckScreen> {
 
       print('🔍 Raw pVerify API Response Keys: ${eligibilityData.keys.toList()}');
 
+      // Check for error messages in the response
+      final errorMessage = eligibilityData['APIResponseMessage'] as String?;
+      final ediErrorMessage = eligibilityData['EDIErrorMessage'] as String?;
+      
+      if (errorMessage != null && errorMessage.contains('Error')) {
+        print('❌ API Error Response:');
+        print('  - Message: $errorMessage');
+        print('  - EDI Message: $ediErrorMessage');
+        print('  - Follow-up Action: ${eligibilityData['FollowUpAction']}');
+        print('  - Possible Resolution: ${eligibilityData['PossibleResolution']}');
+        
+        String detailedError = "API Error: $errorMessage\n\n";
+        
+        if (errorMessage.contains('Invalid/Missing Subscriber/Insured ID')) {
+          detailedError += "⚠️ Member ID Issue:\n";
+          detailedError += "The Member ID doesn't match the insurance payer's records.\n\n";
+          detailedError += "Please check:\n";
+          detailedError += "• Member ID format (including any letters/prefixes)\n";
+          detailedError += "• Correct insurance payer selected\n";
+          detailedError += "• Member ID matches your insurance card exactly\n";
+        }
+        
+        detailedError += "\nFollow-up Action: ${eligibilityData['FollowUpAction'] ?? 'Please verify your information'}";
+        
+        setState(() {
+          _error = detailedError;
+        });
+        return;
+      }
+
       // Process the real pVerify response
       final processedData = _processEligibilityResponse(eligibilityData);
 
@@ -168,6 +204,7 @@ class _NewInsuranceCheckScreenState extends State<NewInsuranceCheckScreen> {
         _data = processedData;
       });
     } catch (e) {
+      print('❌ Exception during eligibility check: $e');
       setState(() {
         _error = "Failed to fetch eligibility: $e";
       });
